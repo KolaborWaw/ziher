@@ -144,6 +144,124 @@ class EntriesControllerTest < ActionDispatch::IntegrationTest
     assert_equal true, updated_income_entry.is_expense
   end
 
+  test "should handle type change in edit form" do
+    # Test dla zmiany wpisu typu wydatek na wpływ
+    get edit_entry_path(@entry), params: {type_changed: true}
+    assert_response :success
+    
+    # Powinien pokazać kategorie dla wpływów, nie dla wydatków
+    assert_select "input.category", Category.where(:year => @entry.journal.year, :is_expense => false).count
+    
+    # Sprawdź, czy is_expense zostało zmienione w formularzu
+    assert_select "input[type=hidden][name='entry[is_expense]'][value=false]", 1
+  end
+  
+  test "should handle type change with validation errors" do
+    # Przygotuj dane z błędem walidacji (brak nazwy)
+    attributes = @entry.attributes
+    attributes["is_expense"] = false
+    attributes["name"] = ""
+    
+    put entry_url(@entry), params: {entry: attributes}
+    assert_response :success  # Powinien renderować formularz edycji
+    assert_select "div#error_explanation", 1  # Powinien zawierać komunikat o błędzie
+    
+    # Dane w bazie nie powinny się zmienić
+    unchanged_entry = Entry.find(@entry.id)
+    assert_equal @entry.is_expense, unchanged_entry.is_expense
+    assert_equal @entry.name, unchanged_entry.name
+  end
+
+  test "should preserve referer when updating entry" do
+    # Ustaw referer na konkretny URL
+    referer_url = journal_path(@entry.journal)
+    
+    attributes = @entry.attributes
+    attributes["name"] = "Updated name"
+    
+    put entry_url(@entry), params: {entry: attributes.merge(referer: referer_url)}
+    assert_redirected_to referer_url
+  end
+  
+  test "should preserve referer when creating entry" do
+    # Ustaw referer na konkretny URL
+    referer_url = journal_path(@entry.journal)
+    
+    # Przygotuj nowy wpis
+    new_hash = @entry.attributes
+    items_hash = Hash.new
+    i = 0
+    @entry.items.each do |item|
+      items_hash[i.to_s] = item.attributes
+      items_hash[i.to_s]["id"] = nil
+      i += 1
+    end
+    new_hash["items_attributes"] = items_hash
+    new_hash["id"] = nil
+    new_hash["referer"] = referer_url
+    
+    post entries_url, params: {entry: new_hash}
+    assert_redirected_to referer_url
+  end
+
+  test "should render correct type switch interface in edit form" do
+    get edit_entry_path(@entry)
+    assert_response :success
+    
+    # Sprawdź, czy formularz zawiera przyciski radio do zmiany typu
+    assert_select "input#entry_type_expense[type=radio]", 1
+    assert_select "input#entry_type_income[type=radio]", 1
+    
+    # Sprawdź, czy jest informacja pomocnicza o zmianie typu
+    assert_select "div.help-block", 1
+  end
+  
+  test "should not show type switch in new form" do
+    get new_entry_path, params: {journal_id: @entry.journal_id}
+    assert_response :success
+    
+    # Sprawdź, czy formularz NIE zawiera przycisków radio do zmiany typu
+    assert_select "input#entry_type_expense[type=radio]", 0
+    assert_select "input#entry_type_income[type=radio]", 0
+    
+    # Powinien zawierać ukryte pole z typem wpisu
+    assert_select "input[type=hidden][name='entry[is_expense]']", 1
+  end
+  
+  test "should show warning after type change" do
+    get edit_entry_path(@entry), params: {type_changed: true}
+    assert_response :success
+    
+    # Sprawdź, czy pojawia się ostrzeżenie po zmianie typu
+    assert_select "div.alert-warning", 1
+    
+    # Sprawdź, czy NIE pokazują się przyciski radio po zmianie typu
+    assert_select "input#entry_type_expense[type=radio]", 0
+    assert_select "input#entry_type_income[type=radio]", 0
+  end
+  
+  test "should handle linked entries when changing type" do
+    # Utwórz wpis z połączonym wpisem
+    source_entry = entries(:expense_one)
+    linked_entry = entries(:income_one)
+    
+    source_entry.linked_entry = linked_entry
+    source_entry.save!
+    
+    # Zmień typ wpisu źródłowego
+    attributes = source_entry.attributes
+    attributes["is_expense"] = false
+    
+    put entry_url(source_entry), params: {entry: attributes}
+    
+    # Sprawdź, czy typy są nadal przeciwne
+    updated_source = Entry.find(source_entry.id)
+    updated_linked = Entry.find(linked_entry.id)
+    
+    assert_equal false, updated_source.is_expense
+    assert_equal true, updated_linked.is_expense
+  end
+
   test 'should not save empty entry' do
     # given
     entries_count_before = Entry.count

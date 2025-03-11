@@ -47,17 +47,34 @@ class EntriesController < ApplicationController
     authorize! :create, @entry
 
     respond_to do |format|
-      if @entry.save
+      # Próba zapisania wpisu
+      begin
+        save_success = @entry.save
+      rescue => e
+        # Obsługa błędów podczas zapisywania
+        Rails.logger.error("Błąd podczas tworzenia wpisu: #{e.message}")
+        save_success = false
+        @entry.errors.add(:base, "Wystąpił błąd podczas zapisywania: #{e.message}")
+      end
+      
+      if save_success
         format.html do
-          if params[:entry][:referer]
-            redirect_to params[:entry][:referer], notice: 'Wpis utworzony'
+          # Zawsze wracaj do strony, z której przyszedł użytkownik (referer),
+          # a jeśli referer nie istnieje, wróć do widoku książki
+          flash[:notice] = 'Wpis utworzony'
+          redirect_destination = if @referer.present?
+            @referer
           else
-            redirect_to @entry.journal, notice: 'Wpis utworzony'
+            journal_path(@entry.journal)
           end
+          
+          redirect_to redirect_destination
         end
         format.json { render json: @entry, status: :created, location: @entry }
       else
         @journal = @entry.journal
+        @categories = Category.where(:year => @entry.journal.year, :is_expense => @entry.is_expense)
+        @sorted_items = @entry.items.sort_by {|item| item.category&.position.to_s }
 
         format.html { render action: "new" }
         format.json { render json: @entry.errors, status: :unprocessable_entity }
@@ -78,9 +95,13 @@ class EntriesController < ApplicationController
       @categories = Category.where(:year => @entry.journal.year, :is_expense => !@entry.is_expense)
       # Aktualizujemy is_expense w entry do wyświetlenia właściwego formularza
       @entry.is_expense = !@entry.is_expense
+      # Zapisujemy informację o zmianie typu w sesji dla celów bezpieczeństwa
+      session[:entry_type_changed] = true
     else
       # Standardowe zachowanie - pobieramy kategorie zgodne z obecnym typem wpisu
       @categories = Category.where(:year => @entry.journal.year, :is_expense => @entry.is_expense)
+      # Czyścimy informację o zmianie typu
+      session[:entry_type_changed] = nil
     end
     
     create_empty_items(@entry, @journal.year)
@@ -89,6 +110,11 @@ class EntriesController < ApplicationController
 
     @sorted_items = @entry.items.sort_by {|item| item.category.position.to_s}
     @referer = request.referer
+    
+    # Jeśli referer nie istnieje lub prowadzi do nieprawidłowej strony, użyj widoku książki jako fallback
+    if @referer.blank? || !(@referer =~ /journals/)
+      @referer = journal_path(@journal)
+    end
   end
 
   # PUT /entries/1
@@ -103,19 +129,39 @@ class EntriesController < ApplicationController
     # Zapisz oryginalny typ wpisu przed zmianą
     original_is_expense = @entry.is_expense
     
+    # Obsługa linked_entry (powiązanego wpisu)
     if params[:is_linked]
       if @entry.linked_entry
-        @entry.linked_entry.update_attributes(params[:linked_entry])
-        linked_entry = @entry.linked_entry
+        # Jeśli linked_entry już istnieje, aktualizuj go
+        if params[:linked_entry]
+          @entry.linked_entry.update_attributes(params[:linked_entry])
+          linked_entry = @entry.linked_entry
+        end
       else
-        linked_entry = Entry.new(params[:linked_entry])
+        # Jeśli linked_entry nie istnieje, utwórz nowy
+        if params[:linked_entry]
+          linked_entry = Entry.new(params[:linked_entry])
+          linked_entry = copy_to_linked_entry(@entry, linked_entry)
+          @entry.linked_entry = linked_entry
+        end
       end
-      @entry.linked_entry = copy_to_linked_entry(@entry, linked_entry)
+      
       @linked_entry = @entry.linked_entry
     end
 
     respond_to do |format|
-      if @entry.update_attributes(entry_params)
+      # Próba aktualizacji wpisu
+      begin
+        update_success = @entry.update_attributes(entry_params)
+      rescue => e
+        # Obsługa błędów podczas aktualizacji
+        Rails.logger.error("Błąd podczas aktualizacji wpisu: #{e.message}")
+        update_success = false
+        @entry.errors.add(:base, "Wystąpił błąd podczas zapisywania: #{e.message}")
+      end
+      
+      # Sprawdź, czy aktualizacja się powiodła
+      if update_success
         # Sprawdź czy zmienił się typ wpisu
         if original_is_expense != @entry.is_expense
           flash[:notice] = "Zmiany zapisane. Zmieniono typ wpisu z #{original_is_expense ? 'wydatku' : 'wpływu'} na #{@entry.is_expense ? 'wydatek' : 'wpływ'}."
@@ -123,15 +169,24 @@ class EntriesController < ApplicationController
           flash[:notice] = "Zmiany zapisane"
         end
         
+        # Wyczyść informację o zmianie typu z sesji
+        session[:entry_type_changed] = nil
+        
         format.html do
-          if params[:entry][:referer]
-            redirect_to params[:entry][:referer]
+          # Zawsze wracaj do strony, z której przyszedł użytkownik (referer),
+          # a jeśli referer nie istnieje, wróć do widoku książki
+          redirect_destination = if @referer.present?
+            @referer
           else
-            redirect_to @journal
+            journal_path(@journal)
           end
+          
+          redirect_to redirect_destination
         end
         format.json { head :ok }
       else
+        # W przypadku błędu walidacji, przygotuj formularz do ponownego wyświetlenia
+        @categories = Category.where(:year => @entry.journal.year, :is_expense => @entry.is_expense)
         create_empty_items(@entry, @journal.year)
         @sorted_items = @entry.items.sort_by {|item| item.category.position.to_s}
 
@@ -156,6 +211,8 @@ class EntriesController < ApplicationController
   end
 
   def create_empty_items_in_linked_entry(entry)
+    return nil unless entry
+    
     if entry.linked_entry
       linked_entry = entry.linked_entry
     else
@@ -163,31 +220,66 @@ class EntriesController < ApplicationController
       linked_entry.items = []
       linked_entry.is_expense = !entry.is_expense
     end
+    
+    # Upewnij się, że linked_entry ma prawidłowy typ (przeciwny do głównego wpisu)
+    if linked_entry.is_expense == entry.is_expense
+      linked_entry.is_expense = !entry.is_expense
+    end
+    
     create_empty_items(linked_entry, entry.journal.year)
 
     return linked_entry
   end
 
   def create_empty_items(entry, year)
+    # Sprawdź czy wymagane pola są ustawione
+    return if entry.nil? || year.nil?
+    
     # Najpierw czyścimy istniejące items, gdy zmieniamy typ wpisu
     if params[:type_changed].present?
       entry.items = []
     end
     
-    # Dodajemy nowe items dla odpowiednich kategorii
-    Category.where(:year => year, :is_expense => entry.is_expense).each do |category|
-      unless entry.has_category(category)
-        entry.items << Item.new(:category_id => category.id)
+    # Pobierz wszystkie kategorie pasujące do typu wpisu i roku
+    begin
+      categories = Category.where(:year => year, :is_expense => entry.is_expense)
+      
+      # Dodajemy nowe items dla odpowiednich kategorii
+      categories.each do |category|
+        unless entry.has_category(category)
+          new_item = Item.new(:category_id => category.id)
+          # Ustaw domyślne wartości dla nowego item
+          new_item.amount = 0
+          new_item.amount_one_percent = 0 if category.is_expense
+          entry.items << new_item
+        end
       end
+    rescue => e
+      # Loguj błąd, ale nie przerywaj wykonania
+      Rails.logger.error("Błąd podczas tworzenia pustych items: #{e.message}")
     end
   end
 
   def copy_to_linked_entry(entry, linked_entry)
-      linked_entry.date = entry.date
-      linked_entry.name = entry.name
-      linked_entry.is_expense = !entry.is_expense
-      linked_entry.document_number = entry.document_number
-      return linked_entry
+    return nil unless entry && linked_entry
+  
+    # Kopiujemy podstawowe dane z głównego wpisu
+    linked_entry.date = entry.date
+    linked_entry.name = entry.name
+    
+    # Upewniamy się, że linked_entry ma zawsze przeciwny typ do głównego wpisu
+    linked_entry.is_expense = !entry.is_expense
+    
+    linked_entry.document_number = entry.document_number
+    
+    # Upewnij się, że linked_entry ma prawidłowy journal_id, jeśli nie został jeszcze ustawiony
+    if linked_entry.journal_id.blank? && entry.journal
+      # Znajdź domyślny journal o przeciwnym typie
+      other_journals = entry.journal.journals_for_linked_entry
+      linked_entry.journal_id = other_journals.first.id if other_journals.any?
+    end
+    
+    return linked_entry
   end
 
   private

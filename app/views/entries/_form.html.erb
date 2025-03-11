@@ -20,21 +20,23 @@
       <div class="well">
         <div class="row">
           <div class="col-md-3">
-            <%= f.label :data %>
-            <%= f.text_field :date, class: "form-control" %>
+            <%= f.label :data %> <span class="text-danger">*</span>
+            <%= f.text_field :date, class: "form-control", required: true %>
           </div>
           <div class="col-md-6 col-md-offset-3">
-            <%= f.label :Numer_dokumentu %>
-            <%= f.text_field :document_number, class: "form-control" %>
+            <%= f.label :Numer_dokumentu %> <span class="text-danger">*</span>
+            <%= f.text_field :document_number, class: "form-control", required: true %>
           </div>
         </div>
         <div class="row top-buffer-20">
           <div class="col-md-12">
-            <%= f.label :Opis %>
-            <%= f.text_field :name, class: "form-control" %>
+            <%= f.label :Opis %> <span class="text-danger">*</span>
+            <%= f.text_field :name, class: "form-control", required: true %>
           </div>
         </div>
         
+        <% if @entry.id.present? && params[:type_changed].blank? %>
+        <%# Pokaż opcję zmiany typu tylko podczas edycji istniejącego wpisu (nie przy dodawaniu) %>
         <div class="row top-buffer-20">
           <div class="col-md-12">
             <label>Typ wpisu:</label>
@@ -46,8 +48,28 @@
               <%= f.radio_button :is_expense, true, id: "entry_type_expense", onclick: "handleEntryTypeChange(true)" %>
               <%= f.label :is_expense, "Wydatek", value: true, for: "entry_type_expense" %>
             </div>
+            <div class="help-block">
+              <small class="text-muted">Zmiana typu wpisu spowoduje przeniesienie wszystkich wartości do pierwszej kategorii nowego typu. 
+              Po zmianie typu wpisu należy zapisać zmiany, aby móc wprowadzić inne modyfikacje.</small>
+            </div>
           </div>
         </div>
+        <% elsif params[:type_changed].present? %>
+        <%# Po zmianie typu nie można go ponownie zmienić przed zapisaniem %>
+        <div class="row top-buffer-20">
+          <div class="col-md-12">
+            <label>Typ wpisu:</label>
+            <div class="alert alert-warning" role="alert">
+              Typ wpisu został zmieniony na <strong><%= @entry.is_expense ? 'wydatek' : 'wpływ' %></strong>. 
+              Aby zapisać zmiany, kliknij przycisk "Zapisz" poniżej. Aby zmienić ponownie typ wpisu, musisz najpierw zapisać bieżące zmiany.
+            </div>
+            <%= f.hidden_field :is_expense, value: @entry.is_expense %>
+          </div>
+        </div>
+        <% else %>
+        <%# Dla nowego wpisu, ukryj opcję wyboru typu %>
+        <%= f.hidden_field :is_expense, value: @entry.is_expense %>
+        <% end %>
       </div>
 
     </div>
@@ -102,8 +124,16 @@
   </div>
 
   <div class="row top-buffer-20">
-    <div class="col-md-12">
-      <%= f.submit "Zapisz", class: "btn btn-sm btn-success"%>
+    <div class="col-md-6">
+      <p><span class="text-danger">*</span> - pola wymagane</p>
+    </div>
+    <div class="col-md-6 text-right">
+      <%= f.submit "Zapisz", class: "btn btn-sm btn-success", data: { disable_with: "Zapisywanie..." } %>
+      <% if @entry.id.present? %>
+        <%= link_to 'Anuluj', @referer, class: "btn btn-sm btn-default" %>
+      <% else %>
+        <%= link_to 'Anuluj', journal_path(@journal), class: "btn btn-sm btn-default" %>
+      <% end %>
     </div>
   </div>
 <% end %>
@@ -111,32 +141,51 @@
   showOrHideLinkedEntry();
   
   function handleEntryTypeChange(isExpense) {
-    // Oblicz sumę wszystkich wartości we wpisie
-    let currentTotalAmount = calculateTotalAmount();
-    
-    // Pobierz obecne wartości formularza
-    const date = document.getElementById('entry_date').value;
-    const documentNumber = document.getElementById('entry_document_number').value;
-    const name = document.getElementById('entry_name').value;
-    
-    // Zapisz aktualny stan formularza przed zmianą
-    const formData = {
-      date: date,
-      documentNumber: documentNumber,
-      name: name,
-      amount: currentTotalAmount,
-      isExpense: isExpense
-    };
-    
-    // Zapisz dane w localStorage
-    localStorage.setItem('entryTypeChangeData', JSON.stringify(formData));
-    
-    // Przekieruj do odpowiedniego formularza edycji z zachowaniem ID wpisu
-    const entryId = window.location.pathname.split('/')[2];
-    const journalId = <%= @journal.id %>;
-    
-    // Odśwież stronę, aby pokazać właściwe kategorie
-    window.location.href = `/entries/${entryId}/edit?type_changed=true`;
+    try {
+      // Sprawdź, czy formularz jest prawidłowo wypełniony przed zmianą typu
+      const date = document.getElementById('entry_date').value;
+      const documentNumber = document.getElementById('entry_document_number').value;
+      const name = document.getElementById('entry_name').value;
+      
+      if (!date || !documentNumber || !name) {
+        alert('Przed zmianą typu wpisu wypełnij wszystkie wymagane pola: data, numer dokumentu i opis.');
+        // Przywróć oryginalny stan przycisków radio
+        const currentIsExpense = <%= @entry.is_expense ? 'true' : 'false' %>;
+        document.getElementById(currentIsExpense === 'true' ? 'entry_type_expense' : 'entry_type_income').checked = true;
+        return;
+      }
+      
+      // Oblicz sumę wszystkich wartości we wpisie
+      const currentTotalAmount = calculateTotalAmount();
+      
+      // Zapisz aktualny stan formularza przed zmianą
+      const formData = {
+        date: date,
+        documentNumber: documentNumber,
+        name: name,
+        amount: currentTotalAmount,
+        isExpense: isExpense
+      };
+      
+      try {
+        // Zapisz dane w localStorage
+        localStorage.setItem('entryTypeChangeData', JSON.stringify(formData));
+      } catch (e) {
+        console.error('Błąd podczas zapisywania danych w localStorage:', e);
+        alert('Wystąpił błąd podczas zmiany typu wpisu. Upewnij się, że Twoja przeglądarka obsługuje localStorage.');
+        return;
+      }
+      
+      // Przekieruj do odpowiedniego formularza edycji z zachowaniem ID wpisu
+      const entryId = window.location.pathname.split('/')[2];
+      const journalId = <%= @journal.id %>;
+      
+      // Odśwież stronę, aby pokazać właściwe kategorie
+      window.location.href = `/entries/${entryId}/edit?type_changed=true`;
+    } catch (error) {
+      console.error('Błąd podczas zmiany typu wpisu:', error);
+      alert('Wystąpił nieoczekiwany błąd podczas zmiany typu wpisu. Spróbuj odświeżyć stronę i spróbować ponownie.');
+    }
   }
   
   // Funkcja obliczająca łączną sumę wszystkich kategorii
@@ -156,43 +205,78 @@
   
   // Po załadowaniu strony sprawdź, czy właśnie zmieniono typ wpisu
   document.addEventListener('DOMContentLoaded', function() {
-    // Ustaw odpowiedni przycisk radiowy na podstawie wartości is_expense
-    const isExpense = <%= @entry.is_expense ? 'true' : 'false' %>;
-    if (isExpense) {
-      document.getElementById('entry_type_expense').checked = true;
-    } else {
-      document.getElementById('entry_type_income').checked = true;
-    }
-    
-    const urlParams = new URLSearchParams(window.location.search);
-    const typeChanged = urlParams.get('type_changed');
-    
-    if (typeChanged) {
-      const savedData = JSON.parse(localStorage.getItem('entryTypeChangeData'));
-      if (savedData) {
-        // Ustaw zapisane wartości w formularzu
-        document.getElementById('entry_date').value = savedData.date;
-        document.getElementById('entry_document_number').value = savedData.documentNumber;
-        document.getElementById('entry_name').value = savedData.name;
-        
-        // Ustaw pierwszą kategorię na zapisaną kwotę
-        const firstCategory = document.querySelector('input.category');
-        if (firstCategory) {
-          firstCategory.value = savedData.amount;
-        }
-        
-        // Wyczyść zapisane dane
-        localStorage.removeItem('entryTypeChangeData');
-        
-        // Pokaż komunikat informujący o zmianie typu wpisu
-        const alertDiv = document.createElement('div');
-        alertDiv.className = 'alert alert-info';
-        alertDiv.role = 'alert';
-        alertDiv.innerHTML = `Zmieniono typ wpisu na <strong>${savedData.isExpense ? 'wydatek' : 'wpływ'}</strong>. Łączna kwota została przeniesiona do pierwszej kategorii. Zapisz zmiany, aby zatwierdzić.`;
-        
-        const formContainer = document.querySelector('form');
-        formContainer.insertBefore(alertDiv, formContainer.firstChild);
+    try {
+      // Inicjalizacja kalendarza dla pola daty
+      if (typeof $.fn.datepicker !== 'undefined') {
+        $('#entry_date').datepicker({
+          format: 'yyyy-mm-dd',
+          autoclose: true,
+          todayHighlight: true,
+          language: 'pl'
+        });
       }
+      
+      // Formatowanie pól kwot
+      const formatAmountFields = function() {
+        $('input.category').on('blur', function() {
+          let value = $(this).val().replace(',', '.');
+          if (value && !isNaN(parseFloat(value))) {
+            $(this).val(parseFloat(value).toFixed(2));
+          }
+        });
+      };
+      
+      // Wywołaj formatowanie kwot
+      formatAmountFields();
+      
+      <% if @entry.id.present? && params[:type_changed].blank? %>
+      // Ustaw odpowiedni przycisk radiowy na podstawie wartości is_expense
+      const isExpense = <%= @entry.is_expense ? 'true' : 'false' %>;
+      if (isExpense) {
+        document.getElementById('entry_type_expense').checked = true;
+      } else {
+        document.getElementById('entry_type_income').checked = true;
+      }
+      <% end %>
+      
+      const urlParams = new URLSearchParams(window.location.search);
+      const typeChanged = urlParams.get('type_changed');
+      
+      if (typeChanged) {
+        try {
+          const savedDataStr = localStorage.getItem('entryTypeChangeData');
+          if (!savedDataStr) {
+            console.warn('Brak zapisanych danych w localStorage dla zmiany typu wpisu');
+            return;
+          }
+          
+          const savedData = JSON.parse(savedDataStr);
+          if (!savedData) {
+            console.warn('Nie można odczytać danych z localStorage');
+            return;
+          }
+          
+          // Ustaw zapisane wartości w formularzu
+          if (savedData.date) document.getElementById('entry_date').value = savedData.date;
+          if (savedData.documentNumber) document.getElementById('entry_document_number').value = savedData.documentNumber;
+          if (savedData.name) document.getElementById('entry_name').value = savedData.name;
+          
+          // Ustaw pierwszą kategorię na zapisaną kwotę
+          if (savedData.amount && savedData.amount > 0) {
+            const firstCategory = document.querySelector('input.category');
+            if (firstCategory) {
+              firstCategory.value = parseFloat(savedData.amount).toFixed(2);
+            }
+          }
+          
+          // Wyczyść zapisane dane
+          localStorage.removeItem('entryTypeChangeData');
+        } catch (e) {
+          console.error('Błąd podczas odczytywania danych z localStorage:', e);
+        }
+      }
+    } catch (error) {
+      console.error('Błąd podczas inicjalizacji formularza:', error);
     }
   });
 </script>

@@ -123,10 +123,19 @@ class Entry < ApplicationRecord
   end
 
   def must_be_either_expense_or_income
-    items.each do |item|
-      if item.amount && item.amount > 0 && item.category.is_expense != self.is_expense
-        errors[:base] << "Wszystkie kategorie w wpisie muszą być tego samego typu (wpływ lub wydatek)"
-        break
+    # Podczas zmiany typu wpisu, sprawdzamy tylko kategorie, które mają niezerowe wartości,
+    # aby umożliwić zmianę typu wpisu
+    non_zero_items = items.select { |item| item.amount && item.amount > 0 }
+    
+    # Jeśli są jakieś niezerowe elementy, muszą mieć kategorie zgodne z typem wpisu
+    different_type_items = non_zero_items.select { |item| item.category.is_expense != self.is_expense }
+    
+    if different_type_items.any?
+      # Jeśli to jest zmiana typu wpisu, ignorujemy ten błąd - walidacja będzie przeprowadzona ponownie po zapisaniu
+      # z poprawnymi kategoriami
+      unless is_changing_type?
+        item_categories = different_type_items.map { |item| item.category.name }.join(", ")
+        errors[:base] << "Wszystkie kategorie w wpisie muszą być tego samego typu (#{self.is_expense ? 'wydatek' : 'wpływ'}). Nieprawidłowe kategorie: #{item_categories}"
       end
     end
   end
@@ -179,5 +188,15 @@ class Entry < ApplicationRecord
     income_sum = entries.select { |e| !e.is_expense }.sum { |e| e.sum.to_d }
 
     @balance = initial_balance + income_sum - expense_sum
+  end
+
+  # Pomocnicza metoda określająca czy wpis jest do zmiany
+  def is_changing_type?
+    return false unless persisted?  # Tylko dla istniejących wpisów
+    
+    # Sprawdź, czy is_expense się zmieniło
+    is_expense_changed = changes.key?('is_expense') && changes['is_expense'][0] != changes['is_expense'][1]
+    
+    is_expense_changed
   end
 end
