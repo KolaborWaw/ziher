@@ -71,7 +71,18 @@ class EntriesController < ApplicationController
     authorize! :update, @entry
     @journal = @entry.journal
     @other_journals = @journal.journals_for_linked_entry
-    @categories = Category.where(:year => @entry.journal.year, :is_expense => @entry.is_expense)
+    
+    # Sprawdź, czy zmieniono typ wpisu
+    if params[:type_changed].present?
+      # Pobieramy kategorie zgodne z NOWYM typem wpisu (przeciwnym do oryginalnego)
+      @categories = Category.where(:year => @entry.journal.year, :is_expense => !@entry.is_expense)
+      # Aktualizujemy is_expense w entry do wyświetlenia właściwego formularza
+      @entry.is_expense = !@entry.is_expense
+    else
+      # Standardowe zachowanie - pobieramy kategorie zgodne z obecnym typem wpisu
+      @categories = Category.where(:year => @entry.journal.year, :is_expense => @entry.is_expense)
+    end
+    
     create_empty_items(@entry, @journal.year)
 
     @linked_entry = create_empty_items_in_linked_entry(@entry)
@@ -88,7 +99,10 @@ class EntriesController < ApplicationController
     authorize! :update, @entry
     @journal = @entry.journal
     @other_journals = @journal.journals_for_linked_entry
-
+    
+    # Zapisz oryginalny typ wpisu przed zmianą
+    original_is_expense = @entry.is_expense
+    
     if params[:is_linked]
       if @entry.linked_entry
         @entry.linked_entry.update_attributes(params[:linked_entry])
@@ -102,11 +116,18 @@ class EntriesController < ApplicationController
 
     respond_to do |format|
       if @entry.update_attributes(entry_params)
+        # Sprawdź czy zmienił się typ wpisu
+        if original_is_expense != @entry.is_expense
+          flash[:notice] = "Zmiany zapisane. Zmieniono typ wpisu z #{original_is_expense ? 'wydatku' : 'wpływu'} na #{@entry.is_expense ? 'wydatek' : 'wpływ'}."
+        else
+          flash[:notice] = "Zmiany zapisane"
+        end
+        
         format.html do
           if params[:entry][:referer]
-            redirect_to params[:entry][:referer], notice: 'Zmiany zapisane'
+            redirect_to params[:entry][:referer]
           else
-            redirect_to @journal, notice: 'Zmiany zapisane'
+            redirect_to @journal
           end
         end
         format.json { head :ok }
@@ -148,6 +169,12 @@ class EntriesController < ApplicationController
   end
 
   def create_empty_items(entry, year)
+    # Najpierw czyścimy istniejące items, gdy zmieniamy typ wpisu
+    if params[:type_changed].present?
+      entry.items = []
+    end
+    
+    # Dodajemy nowe items dla odpowiednich kategorii
     Category.where(:year => year, :is_expense => entry.is_expense).each do |category|
       unless entry.has_category(category)
         entry.items << Item.new(:category_id => category.id)

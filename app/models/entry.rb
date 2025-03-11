@@ -123,15 +123,10 @@ class Entry < ApplicationRecord
   end
 
   def must_be_either_expense_or_income
-    is_expense = false
-    is_income = false
     items.each do |item|
-      if item.amount && item.amount > 0
-        is_expense = true if item.category.is_expense
-        is_income = true unless item.category.is_expense
-        if is_expense && is_income
-          errors[:base] << "Wpis nie może być jednocześnie wpływem i wydatkiem"
-        end
+      if item.amount && item.amount > 0 && item.category.is_expense != self.is_expense
+        errors[:base] << "Wszystkie kategorie w wpisie muszą być tego samego typu (wpływ lub wydatek)"
+        break
       end
     end
   end

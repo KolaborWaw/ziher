@@ -102,6 +102,47 @@ class EntriesControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to journal_path(@entry.journal)
   end
 
+  test "should show type switch form radio buttons when editing entry" do
+    get edit_entry_path(@entry)
+    assert_select "input#entry_type_expense[type=radio]", 1
+    assert_select "input#entry_type_income[type=radio]", 1
+  end
+
+  test "should change categories when changing entry type" do
+    # Test dla zmiany wpisu typu wydatek na wpływ
+    get edit_entry_path(@entry), params: {type_changed: true}
+    assert_response :success
+    assert_select "input.category", Category.where(:year => @entry.journal.year, :is_expense => false).count
+    
+    # Test dla zmiany wpisu typu wpływ na wydatek
+    get edit_entry_path(@entry_income), params: {type_changed: true}
+    assert_response :success
+    assert_select "input.category", Category.where(:year => @entry_income.journal.year, :is_expense => true).count * 2
+  end
+
+  test "should update entry with changed type" do
+    # Konwersja z wydatku na wpływ
+    attributes = @entry.attributes
+    attributes["is_expense"] = false
+    
+    put entry_url(@entry), params: {entry: attributes}
+    assert_redirected_to journal_path(assigns(:journal))
+    
+    # Sprawdź, czy typ został zmieniony
+    updated_entry = Entry.find(@entry.id)
+    assert_equal false, updated_entry.is_expense
+    
+    # Konwersja z wpływu na wydatek
+    attributes = @entry_income.attributes
+    attributes["is_expense"] = true
+    
+    put entry_url(@entry_income), params: {entry: attributes}
+    assert_redirected_to journal_path(assigns(:journal))
+    
+    # Sprawdź, czy typ został zmieniony
+    updated_income_entry = Entry.find(@entry_income.id)
+    assert_equal true, updated_income_entry.is_expense
+  end
 
   test 'should not save empty entry' do
     # given

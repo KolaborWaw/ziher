@@ -34,13 +34,25 @@
             <%= f.text_field :name, class: "form-control" %>
           </div>
         </div>
+        
+        <div class="row top-buffer-20">
+          <div class="col-md-12">
+            <label>Typ wpisu:</label>
+            <div class="radio">
+              <%= f.radio_button :is_expense, false, id: "entry_type_income", onclick: "handleEntryTypeChange(false)" %>
+              <%= f.label :is_expense, "Wpływ", value: false, for: "entry_type_income" %>
+            </div>
+            <div class="radio">
+              <%= f.radio_button :is_expense, true, id: "entry_type_expense", onclick: "handleEntryTypeChange(true)" %>
+              <%= f.label :is_expense, "Wydatek", value: true, for: "entry_type_expense" %>
+            </div>
+          </div>
+        </div>
       </div>
 
     </div>
 
-    <div class="col-md-12">
-
-
+    <div class="col-md-12" id="categories-container">
       <%= f.fields_for :items, @sorted_items do |item_fields| %>
         <div class="row top-buffer-20">
           <% category_name = item_fields.object.category.name %>
@@ -66,7 +78,6 @@
       <% end %>
 
       <%= f.hidden_field :journal_id, :value => @journal.id %>
-      <%= f.hidden_field :is_expense, :value => @entry.is_expense %>
     </div>
 
     <!%-- przenoszenie kwot miedzy ksiazkami na razie wstrzymane --%>
@@ -98,4 +109,90 @@
 <% end %>
 <script type="text/JavaScript">
   showOrHideLinkedEntry();
+  
+  function handleEntryTypeChange(isExpense) {
+    // Oblicz sumę wszystkich wartości we wpisie
+    let currentTotalAmount = calculateTotalAmount();
+    
+    // Pobierz obecne wartości formularza
+    const date = document.getElementById('entry_date').value;
+    const documentNumber = document.getElementById('entry_document_number').value;
+    const name = document.getElementById('entry_name').value;
+    
+    // Zapisz aktualny stan formularza przed zmianą
+    const formData = {
+      date: date,
+      documentNumber: documentNumber,
+      name: name,
+      amount: currentTotalAmount,
+      isExpense: isExpense
+    };
+    
+    // Zapisz dane w localStorage
+    localStorage.setItem('entryTypeChangeData', JSON.stringify(formData));
+    
+    // Przekieruj do odpowiedniego formularza edycji z zachowaniem ID wpisu
+    const entryId = window.location.pathname.split('/')[2];
+    const journalId = <%= @journal.id %>;
+    
+    // Odśwież stronę, aby pokazać właściwe kategorie
+    window.location.href = `/entries/${entryId}/edit?type_changed=true`;
+  }
+  
+  // Funkcja obliczająca łączną sumę wszystkich kategorii
+  function calculateTotalAmount() {
+    let totalAmount = 0;
+    const amountFields = document.querySelectorAll('input.category');
+    
+    for (let i = 0; i < amountFields.length; i++) {
+      const value = parseFloat(amountFields[i].value) || 0;
+      if (value > 0) {
+        totalAmount += value;
+      }
+    }
+    
+    return totalAmount;
+  }
+  
+  // Po załadowaniu strony sprawdź, czy właśnie zmieniono typ wpisu
+  document.addEventListener('DOMContentLoaded', function() {
+    // Ustaw odpowiedni przycisk radiowy na podstawie wartości is_expense
+    const isExpense = <%= @entry.is_expense ? 'true' : 'false' %>;
+    if (isExpense) {
+      document.getElementById('entry_type_expense').checked = true;
+    } else {
+      document.getElementById('entry_type_income').checked = true;
+    }
+    
+    const urlParams = new URLSearchParams(window.location.search);
+    const typeChanged = urlParams.get('type_changed');
+    
+    if (typeChanged) {
+      const savedData = JSON.parse(localStorage.getItem('entryTypeChangeData'));
+      if (savedData) {
+        // Ustaw zapisane wartości w formularzu
+        document.getElementById('entry_date').value = savedData.date;
+        document.getElementById('entry_document_number').value = savedData.documentNumber;
+        document.getElementById('entry_name').value = savedData.name;
+        
+        // Ustaw pierwszą kategorię na zapisaną kwotę
+        const firstCategory = document.querySelector('input.category');
+        if (firstCategory) {
+          firstCategory.value = savedData.amount;
+        }
+        
+        // Wyczyść zapisane dane
+        localStorage.removeItem('entryTypeChangeData');
+        
+        // Pokaż komunikat informujący o zmianie typu wpisu
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'alert alert-info';
+        alertDiv.role = 'alert';
+        alertDiv.innerHTML = `Zmieniono typ wpisu na <strong>${savedData.isExpense ? 'wydatek' : 'wpływ'}</strong>. Łączna kwota została przeniesiona do pierwszej kategorii. Zapisz zmiany, aby zatwierdzić.`;
+        
+        const formContainer = document.querySelector('form');
+        formContainer.insertBefore(alertDiv, formContainer.firstChild);
+      }
+    }
+  });
 </script>
