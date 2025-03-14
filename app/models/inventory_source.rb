@@ -8,7 +8,7 @@ class InventorySource < ApplicationRecord
 
   validates :name, :presence => true, :uniqueness => true
 
-  InventorySource::FINANCE_TYPE_NAME = "ks. finansowa"
+  InventorySource::FINANCE_TYPE_NAME = "ks. kasowa"
   InventorySource::FINANCE_TYPE_ID = JournalType::FINANCE_TYPE_ID
 
   InventorySource::BANK_TYPE_NAME = "ks. bankowa"

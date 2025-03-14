@@ -45,6 +45,8 @@ class BankAccountsController < ApplicationController
         unit = Unit.find_by(code: unit_code)
         if unit
           unit.bank_account = bank_account
+          # Automatycznie włącz auto_bank_import jeśli jest numer konta
+          unit.auto_bank_import = true if bank_account.present?
           unit.save
         end
       end
@@ -170,6 +172,18 @@ class BankAccountsController < ApplicationController
     redirect_to bank_accounts_path, notice: "Usunięto #{entries_count} wpisów z książki bankowej jednostki #{@unit.name} za rok #{@year}"
   end
 
+  def toggle_auto_import
+    @unit = Unit.find(params[:unit_id])
+    @unit.auto_bank_import = !@unit.auto_bank_import
+    
+    if @unit.save
+      status = @unit.auto_bank_import ? "włączony" : "wyłączony"
+      redirect_to bank_accounts_path, notice: "Auto import dla jednostki #{@unit.name} został #{status}"
+    else
+      redirect_to bank_accounts_path, alert: "Nie udało się zmienić ustawienia auto importu dla jednostki #{@unit.name}"
+    end
+  end
+
   private
   
   def require_superadmin
@@ -239,6 +253,14 @@ class BankAccountsController < ApplicationController
         transaction_type = columns[0].strip
         date_str = columns[1].strip
         
+        # Parsuj numer wyciągu z kolumny 4
+        statement_number = columns[3].to_s.strip
+        
+        # Jeśli numer wyciągu jest pusty, ustaw domyślną wartość "PUSTO"
+        if statement_number.blank?
+          statement_number = "PUSTO"
+        end
+        
         # Parsuj kwotę - obsłuż różne formaty
         amount_in_cents = 0
         if !columns[2].blank?
@@ -303,6 +325,7 @@ class BankAccountsController < ApplicationController
         entry = bank_journal.entries.build(
           date: date,
           document_number: transaction_id,
+          statement_number: statement_number,
           name: description,
           is_expense: is_expense
         )

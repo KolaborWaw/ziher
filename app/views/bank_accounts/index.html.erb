@@ -32,7 +32,14 @@
           <td><%= unit.code %></td>
           <td><%= unit.name %></td>
           <td><%= unit.bank_account.present? ? unit.bank_account : "-" %></td>
-          <td><%= render_boolean_icon_centered(unit.auto_bank_import) %></td>
+          <td>
+            <%= link_to toggle_auto_import_bank_accounts_path(unit_id: unit.id), 
+                method: :post,
+                class: "btn btn-xs #{unit.auto_bank_import ? 'btn-success' : 'btn-default'}",
+                data: { confirm: "Czy na pewno chcesz #{unit.auto_bank_import ? 'wyłączyć' : 'włączyć'} auto import dla jednostki #{unit.name}?" } do %>
+              <%= unit.auto_bank_import ? 'Włączony' : 'Wyłączony' %>
+            <% end %>
+          </td>
           <td>
             <%= link_to 'Edytuj', edit_unit_path(unit), class: 'btn btn-xs btn-success' %>
             

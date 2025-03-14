@@ -129,6 +129,16 @@ class EntriesController < ApplicationController
     @journal = @entry.journal
     @other_journals = @journal.journals_for_linked_entry
     
+    # Sprawdź, czy to księga bankowa z auto_bank_import
+    is_auto_import_bank = @journal.journal_type_id == JournalType::BANK_TYPE_ID && @journal.unit.auto_bank_import
+    
+    # Jeśli zwykły użytkownik próbuje zmienić datę wpisu w księdze auto_bank_import, przywróć oryginalną datę
+    if is_auto_import_bank && !current_user.is_superadmin && params[:entry][:date] != @entry.date.to_s
+      # Ustaw datę na oryginalną wartość
+      params[:entry][:date] = @entry.date.to_s
+      flash[:alert] = "Data wpisu w księgach bankowych z auto-importem może być zmieniona tylko przez administratora."
+    end
+    
     # Zapisz oryginalny typ wpisu przed zmianą
     original_is_expense = @entry.is_expense
     
@@ -273,7 +283,13 @@ class EntriesController < ApplicationController
     # Upewniamy się, że linked_entry ma zawsze przeciwny typ do głównego wpisu
     linked_entry.is_expense = !entry.is_expense
     
+    # Kopiujemy document_number zawsze
     linked_entry.document_number = entry.document_number
+    
+    # Kopiujemy statement_number tylko jeśli to księga bankowa
+    if entry.journal && entry.journal.journal_type_id == JournalType::BANK_TYPE_ID
+      linked_entry.statement_number = entry.statement_number
+    end
     
     # Upewnij się, że linked_entry ma prawidłowy journal_id, jeśli nie został jeszcze ustawiony
     if linked_entry.journal_id.blank? && entry.journal
@@ -289,7 +305,7 @@ class EntriesController < ApplicationController
 
   def entry_params
     if params[:entry]
-      params.require(:entry).permit(:date, :name, :document_number, :journal_id, :is_expense, :linked_entry,
+      params.require(:entry).permit(:date, :name, :document_number, :statement_number, :journal_id, :is_expense, :linked_entry,
                                     :items_attributes => [:id, :amount, :amount_one_percent, :category_id, :grant_id,
                                       :item_grants_attributes => [:id, :amount, :grant_id, :item_id]])
     end

@@ -403,10 +403,10 @@ skarbnik_zachodu = User.create!(email: 'skarbnik_zachodu@zhr.pl', password: 'ska
 UserGroupAssociation.create!(user: skarbnik_zachodu, group: wlp, can_view_entries: true, can_manage_entries: true, can_close_journals: true, can_manage_users: true, can_manage_units: false, can_manage_groups: false)
 UserGroupAssociation.create!(user: skarbnik_zachodu, group: dlnsl, can_view_entries: true, can_manage_entries: true, can_close_journals: true, can_manage_users: true, can_manage_units: true, can_manage_groups: true)
 
-finance = JournalType.create!(id: JournalType::FINANCE_TYPE_ID, name: "Książka finansowa", is_default: true)
+finance = JournalType.create!(id: JournalType::FINANCE_TYPE_ID, name: "Książka kasowa", is_default: true)
 bank = JournalType.create!(id: JournalType::BANK_TYPE_ID, name: "Książka bankowa")
 
-finance_inventory_source = InventorySource.create!(name: 'książka finansowa', is_active: true)
+finance_inventory_source = InventorySource.create!(name: 'książka kasowa', is_active: true)
 bank_inventory_source = InventorySource.create!(name: 'książka bankowa', is_active: true)
 
 dukt2010f = Journal.create!(year: 2010, journal_type: finance, unit: dukt, is_open: false, initial_balance: 9.00, initial_balance_one_percent: 9.00)

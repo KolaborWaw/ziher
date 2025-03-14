@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 2025_01_08_133005) do
+ActiveRecord::Schema.define(version: 2025_03_14_225318) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -60,6 +60,7 @@ ActiveRecord::Schema.define(version: 2025_01_08_133005) do
     t.integer "journal_id"
     t.boolean "is_expense"
     t.integer "linked_entry_id"
+    t.string "statement_number"
     t.index ["journal_id"], name: "index_entries_on_journal_id"
   end
 

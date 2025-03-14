@@ -4,7 +4,7 @@
       <thead>
         <tr>
           <th class="text-center">Wpływy</th>
-          <th class="text-center">ks. finansowa</th>
+          <th class="text-center">ks. kasowa</th>
           <th class="text-center">ks. bankowa</th>
         </tr>
       </thead>
@@ -37,7 +37,7 @@
       <thead>
       <tr>
         <th class="text-center">Wydatki</th>
-        <th class="text-center">ks. finansowa</th>
+        <th class="text-center">ks. kasowa</th>
         <th class="text-center">ks. bankowa</th>
       </tr>
       </thead>
@@ -74,7 +74,7 @@
       </thead>
       <tbody>
         <tr>
-          <td>ks. finansowa</td>
+          <td>ks. kasowa</td>
           <td class="text-right"><%= number_with_precision(@finance_hash[@total_balance_income_key], :precision => 2) %> zł</td>
           <td class="text-right"><%= number_with_precision(@finance_hash[@total_balance_expense_key], :precision => 2) %> zł</td>
           <td class="text-right"><%= number_with_precision(@total_hash[:finance_sum], :precision => 2) %> zł</td>

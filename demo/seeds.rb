@@ -72,10 +72,10 @@ inne_2025 = Category.create!(name: 'Inne', is_expense: true, year: 2025)
 wynagrodzenia_2025 = Category.create!(name: 'Wynagrodzenia', is_expense: true, year: 2025)
 skladki_wydatek_2025 = Category.create!(name: 'Składki', is_expense: true, year: 2025)
 
-finance = JournalType.create!(id: JournalType::FINANCE_TYPE_ID, name: "Książka finansowa", is_default: true)
+finance = JournalType.create!(id: JournalType::FINANCE_TYPE_ID, name: "Książka kasowa", is_default: true)
 bank = JournalType.create!(id: JournalType::BANK_TYPE_ID, name: "Książka bankowa")
 
-finance_inventory_source = InventorySource.create!(name: 'książka finansowa', is_active: true)
+finance_inventory_source = InventorySource.create!(name: 'książka kasowa', is_active: true)
 bank_inventory_source = InventorySource.create!(name: 'książka bankowa', is_active: true)
 
 unit = Unit.create!(name: 'Jednostka testowa', code: 'kod-testowy')

@@ -21,12 +21,28 @@
         <div class="row">
           <div class="col-md-3">
             <%= f.label :data %> <span class="text-danger">*</span>
-            <%= f.text_field :date, class: "form-control", required: true %>
+            <% if @is_auto_import_bank && !current_user.is_superadmin %>
+              <%= f.text_field :date, class: "form-control", required: true, disabled: true %>
+              <%= f.hidden_field :date %>
+            <% else %>
+              <%= f.text_field :date, class: "form-control", required: true %>
+            <% end %>
           </div>
-          <div class="col-md-6 col-md-offset-3">
-            <%= f.label :Numer_dokumentu %> <span class="text-danger">*</span>
-            <%= f.text_field :document_number, class: "form-control", required: true %>
-          </div>
+          <% if @journal.journal_type_id == JournalType::BANK_TYPE_ID %>
+            <div class="col-md-3">
+              <%= f.label :Numer_wyciągu %> <span class="text-danger">*</span>
+              <%= f.text_field :statement_number, class: "form-control", required: true %>
+            </div>
+            <div class="col-md-3 col-md-offset-3">
+              <%= f.label :Numer_dokumentu %>
+              <%= f.text_field :document_number, class: "form-control" %>
+            </div>
+          <% else %>
+            <div class="col-md-3 col-md-offset-3">
+              <%= f.label :Numer_dokumentu %> <span class="text-danger">*</span>
+              <%= f.text_field :document_number, class: "form-control", required: true %>
+            </div>
+          <% end %>
         </div>
         <div class="row top-buffer-20">
           <div class="col-md-12">
@@ -144,11 +160,26 @@
     try {
       // Sprawdź, czy formularz jest prawidłowo wypełniony przed zmianą typu
       const date = document.getElementById('entry_date').value;
-      const documentNumber = document.getElementById('entry_document_number').value;
       const name = document.getElementById('entry_name').value;
       
-      if (!date || !documentNumber || !name) {
-        alert('Przed zmianą typu wpisu wypełnij wszystkie wymagane pola: data, numer dokumentu i opis.');
+      // Sprawdź, czy to księga bankowa
+      const isBankJournal = <%= @journal.journal_type_id == JournalType::BANK_TYPE_ID ? 'true' : 'false' %>;
+      
+      let missingFields = [];
+      if (!date) missingFields.push('data');
+      
+      if (isBankJournal) {
+        const statementNumber = document.getElementById('entry_statement_number').value;
+        if (!statementNumber) missingFields.push('numer wyciągu');
+      } else {
+        const documentNumber = document.getElementById('entry_document_number').value;
+        if (!documentNumber) missingFields.push('numer dokumentu');
+      }
+      
+      if (!name) missingFields.push('opis');
+      
+      if (missingFields.length > 0) {
+        alert('Przed zmianą typu wpisu wypełnij wszystkie wymagane pola: ' + missingFields.join(', ') + '.');
         // Przywróć oryginalny stan przycisków radio
         const currentIsExpense = <%= @entry.is_expense ? 'true' : 'false' %>;
         document.getElementById(currentIsExpense === 'true' ? 'entry_type_expense' : 'entry_type_income').checked = true;
@@ -164,13 +195,20 @@
       // Zapisz aktualny stan formularza przed zmianą
       const formData = {
         date: date,
-        documentNumber: documentNumber,
         name: name,
         // Dla księgi bankowej z auto_bank_import przemnóż wartość przez -1
         amount: isAutoImportBank ? -currentTotalAmount : currentTotalAmount,
         isExpense: isExpense,
         isAutoImportBank: isAutoImportBank
       };
+      
+      // Dodaj pola specyficzne dla typu księgi
+      if (isBankJournal) {
+        formData.statementNumber = document.getElementById('entry_statement_number').value;
+        formData.documentNumber = document.getElementById('entry_document_number').value;
+      } else {
+        formData.documentNumber = document.getElementById('entry_document_number').value;
+      }
       
       try {
         // Zapisz dane w localStorage
@@ -196,11 +234,21 @@
   // Funkcja obliczająca łączną sumę wszystkich kategorii
   function calculateTotalAmount() {
     let totalAmount = 0;
-    const amountFields = document.querySelectorAll('input.category');
     
-    for (let i = 0; i < amountFields.length; i++) {
-      const value = parseFloat(amountFields[i].value) || 0;
-      totalAmount += value;
+    // Pobierz wszystkie wiersze z kategoriami
+    const categoryRows = document.querySelectorAll('#categories-container .row.top-buffer-20');
+    
+    // Dla każdego wiersza z kategorią, weź tylko pierwsze pole (główną kwotę)
+    for (let i = 0; i < categoryRows.length; i++) {
+      // Znajdź pierwszy div z klasą col-md-2 w bieżącym wierszu, a następnie pole input w nim
+      const firstColumn = categoryRows[i].querySelector('.col-md-2');
+      if (firstColumn) {
+        const mainAmountField = firstColumn.querySelector('input.category');
+        if (mainAmountField) {
+          const value = parseFloat(mainAmountField.value) || 0;
+          totalAmount += value;
+        }
+      }
     }
     
     return totalAmount;
@@ -261,7 +309,17 @@
           
           // Ustaw zapisane wartości w formularzu
           if (savedData.date) document.getElementById('entry_date').value = savedData.date;
-          if (savedData.documentNumber) document.getElementById('entry_document_number').value = savedData.documentNumber;
+          
+          // Ustaw pola specyficzne dla typu księgi
+          const isBankJournal = <%= @journal.journal_type_id == JournalType::BANK_TYPE_ID ? 'true' : 'false' %>;
+          if (isBankJournal && savedData.statementNumber) {
+            document.getElementById('entry_statement_number').value = savedData.statementNumber;
+          }
+          
+          if (savedData.documentNumber) {
+            document.getElementById('entry_document_number').value = savedData.documentNumber;
+          }
+          
           if (savedData.name) document.getElementById('entry_name').value = savedData.name;
           
           // Ustaw pierwszą kategorię na zapisaną kwotę

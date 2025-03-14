@@ -127,7 +127,15 @@
     <tr class="border-top-bold">
       <th rowspan="2" class="valign_middle"><small>#</small></th>
       <th rowspan="2" class="valign_middle text-center"><small>Data</small></th>
-      <th rowspan="2" class="valign_middle text-center"><small>Opis<br/>Numer dokumentu</small></th>
+      <th rowspan="2" class="valign_middle text-center">
+        <small>Opis
+        <% if @journal.journal_type_id == JournalType::BANK_TYPE_ID %>
+          <br/>Numer wyciągu<br/>Numer dokumentu
+        <% else %>
+          <br/>Numer dokumentu
+        <% end %>
+        </small>
+      </th>
       <th colspan="<%= @categories_income.length %>" class="text-center"><small><%=t 'helpers.label.journal.income_detailed'%></small></th>
       <th rowspan="2" class="income income_all valign_middle text-center"><small><%=t 'helpers.label.journal.income_all'%></small></th>
       <th rowspan="2" class="balance valign_middle text-center"><small><%=t 'helpers.label.journal.balance'%></small></th>
@@ -171,6 +179,10 @@
           <small>
             <span title='<%= I18n.t('helpers.label.journal.name_tooltip') %>'><%= entry.name %></span>
             <hr style='margin: 2px 0;'/>
+            <% if @journal.journal_type_id == JournalType::BANK_TYPE_ID %>
+              <span title='Numer wyciągu'><strong>W:</strong> <%= entry.statement_number %></span>
+              <hr style='margin: 2px 0;'/>
+            <% end %>
             <span title='<%= I18n.t('helpers.label.journal.document_number_tooltip') %>'><%= entry.document_number %></span>
           </small>
         </td>

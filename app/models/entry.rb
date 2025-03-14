@@ -15,10 +15,13 @@ class Entry < ApplicationRecord
   validates :journal, :presence => true
   validates :date, :presence => true
   validates :name, :presence => true
-  validates :document_number, :presence => true
-
+  # document_number no longer required for all entries
+  # validates :document_number, :presence => true
+  # statement_number is validated in must_have_statement_number_for_bank_journal
+  
   validate :must_be_from_journals_year
-
+  validate :must_have_statement_number_for_bank_journal
+  validate :must_have_document_number_for_cash_journal
   validate :cannot_have_multiple_items_in_one_category
   validate :cannot_have_item_from_category_not_from_journals_year
   validate :must_be_either_expense_or_income
@@ -31,6 +34,32 @@ class Entry < ApplicationRecord
 
   after_save :recalculate_initial_balance
   after_destroy :recalculate_initial_balance
+
+  # For backwards compatibility with existing records, provide statement_number getter/setter
+  # that falls back to document_number if statement_number is nil
+  def statement_number
+    self[:statement_number] || self[:document_number]
+  end
+
+  def statement_number=(value)
+    self[:statement_number] = value
+  end
+
+  def must_have_statement_number_for_bank_journal
+    if journal && journal.journal_type_id == JournalType::BANK_TYPE_ID
+      if statement_number.blank?
+        errors[:base] << "Numer wyciągu jest wymagany dla księgi bankowej"
+      end
+    end
+  end
+
+  def must_have_document_number_for_cash_journal
+    if journal && journal.journal_type_id != JournalType::BANK_TYPE_ID
+      if document_number.blank?
+        errors[:base] << "Numer dokumentu jest wymagany dla księgi kasowej"
+      end
+    end
+  end
 
   def get_amount_for_category(category)
     category_id = category.is_a?(Category) ? category.id : category

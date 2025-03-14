@@ -2,7 +2,7 @@
 
 finance:
   id: 1
-  name: Finansowa
+  name: Kasowa
   is_default: true
 
 bank:
