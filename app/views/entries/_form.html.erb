@@ -158,13 +158,18 @@
       // Oblicz sumę wszystkich wartości we wpisie
       const currentTotalAmount = calculateTotalAmount();
       
+      // Sprawdź, czy to księga bankowa z auto_bank_import
+      const isAutoImportBank = <%= @is_auto_import_bank ? 'true' : 'false' %>;
+      
       // Zapisz aktualny stan formularza przed zmianą
       const formData = {
         date: date,
         documentNumber: documentNumber,
         name: name,
-        amount: currentTotalAmount,
-        isExpense: isExpense
+        // Dla księgi bankowej z auto_bank_import przemnóż wartość przez -1
+        amount: isAutoImportBank ? -currentTotalAmount : currentTotalAmount,
+        isExpense: isExpense,
+        isAutoImportBank: isAutoImportBank
       };
       
       try {
@@ -195,9 +200,7 @@
     
     for (let i = 0; i < amountFields.length; i++) {
       const value = parseFloat(amountFields[i].value) || 0;
-      if (value > 0) {
-        totalAmount += value;
-      }
+      totalAmount += value;
     }
     
     return totalAmount;
@@ -262,10 +265,12 @@
           if (savedData.name) document.getElementById('entry_name').value = savedData.name;
           
           // Ustaw pierwszą kategorię na zapisaną kwotę
-          if (savedData.amount && savedData.amount > 0) {
+          if (savedData.amount) {
             const firstCategory = document.querySelector('input.category');
             if (firstCategory) {
-              firstCategory.value = parseFloat(savedData.amount).toFixed(2);
+              // Zachowaj oryginalny znak wartości (dodatni lub ujemny)
+              const amountValue = parseFloat(savedData.amount);
+              firstCategory.value = amountValue.toFixed(2);
             }
           }
           

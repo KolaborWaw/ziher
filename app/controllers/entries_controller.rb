@@ -89,6 +89,9 @@ class EntriesController < ApplicationController
     @journal = @entry.journal
     @other_journals = @journal.journals_for_linked_entry
     
+    # Sprawdź, czy to księga bankowa z auto_bank_import
+    @is_auto_import_bank = @journal.journal_type_id == JournalType::BANK_TYPE_ID && @journal.unit.auto_bank_import
+    
     # Sprawdź, czy zmieniono typ wpisu
     if params[:type_changed].present?
       # Pobieramy kategorie zgodne z NOWYM typem wpisu (przeciwnym do oryginalnego)
