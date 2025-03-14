@@ -173,6 +173,8 @@ ActiveRecord::Schema.define(version: 2025_01_08_133005) do
     t.datetime "updated_at", null: false
     t.string "code"
     t.boolean "is_active", default: true, null: false
+    t.string "bank_account"
+    t.boolean "auto_bank_import", default: false
     t.index ["code"], name: "index_units_on_code", unique: true
     t.index ["is_active"], name: "index_units_on_is_active"
   end

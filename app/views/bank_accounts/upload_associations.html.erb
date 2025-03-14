@@ -1,0 +1,75 @@
+<% content_for :title do %>
+  Zarządzanie numerami kont bankowych
+<% end %>
+
+<h1>Zarządzanie numerami kont bankowych</h1>
+
+<div class="well">
+  <h3>Instrukcja</h3>
+  <p>
+    Na tej stronie możesz zarządzać numerami kont bankowych dla jednostek. Możesz:
+  </p>
+  <ul>
+    <li>Wczytać plik CSV z kodami jednostek i numerami kont</li>
+    <li>Format pliku CSV: <code>kod_jednostki,numer_konta</code> (jedna para na linię)</li>
+    <li>Przykład: <code>123,12345678901234567890</code></li>
+  </ul>
+  <p>
+    <strong>Uwaga:</strong> Jeśli jednostka o podanym kodzie już istnieje, jej numer konta zostanie zaktualizowany.
+  </p>
+</div>
+
+<div class="well">
+  <h3>Wczytaj plik CSV</h3>
+  <%= form_tag process_associations_bank_accounts_path, multipart: true, class: 'form' do %>
+    <div class="form-group">
+      <%= label_tag :csv_file, 'Plik CSV z numerami kont' %>
+      <%= file_field_tag :csv_file, class: 'form-control' %>
+      <small class="form-text text-muted">Wybierz plik CSV z kodami jednostek i numerami kont.</small>
+    </div>
+    
+    <div class="form-group">
+      <%= submit_tag 'Wczytaj', class: 'btn btn-primary' %>
+    </div>
+  <% end %>
+</div>
+
+<hr>
+
+<h3>Lista jednostek</h3>
+<div class="well">
+  <div class="row">
+    <div class="col-md-12">
+      <table class="table table-striped table-condensed">
+        <thead>
+          <tr>
+            <th>Kod</th>
+            <th>Nazwa</th>
+            <th>Numer konta</th>
+            <th>Auto import</th>
+            <th>Akcje</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% Unit.all.order(:code).each do |unit| %>
+            <tr>
+              <td><%= unit.code %></td>
+              <td><%= unit.name %></td>
+              <td><%= unit.bank_account.present? ? unit.bank_account : "-" %></td>
+              <td><%= render_boolean_icon_centered(unit.auto_bank_import) %></td>
+              <td>
+                <%= link_to 'Edytuj', edit_unit_path(unit), class: 'btn btn-xs btn-success' %>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-md-12">
+    <%= link_to 'Powrót do zarządzania kontami', bank_accounts_path, class: 'btn btn-sm btn-default' %>
+  </div>
+</div> 

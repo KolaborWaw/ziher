@@ -1,0 +1,59 @@
+<% content_for :title do %>
+  Zarządzanie kontami bankowymi
+<% end %>
+
+<h1>Zarządzanie kontami bankowymi</h1>
+
+<div class="well">
+  <div class="row">
+    <div class="col-md-12">
+      <h4>Akcje</h4>
+      <%= link_to 'Zarządzaj numerami kont', upload_associations_bank_accounts_path, class: 'btn btn-sm btn-success' %>
+      <%= link_to 'Importuj dane Elixir', upload_elixir_bank_accounts_path, class: 'btn btn-sm btn-primary' %>
+    </div>
+  </div>
+</div>
+
+<div class="well">
+  <h3>Lista jednostek z kontami bankowymi</h3>
+  <table class="table table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Kod</th>
+        <th>Nazwa</th>
+        <th>Numer konta</th>
+        <th>Auto import</th>
+        <th>Akcje</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% @units.each do |unit| %>
+        <tr>
+          <td><%= unit.code %></td>
+          <td><%= unit.name %></td>
+          <td><%= unit.bank_account.present? ? unit.bank_account : "-" %></td>
+          <td><%= render_boolean_icon_centered(unit.auto_bank_import) %></td>
+          <td>
+            <%= link_to 'Edytuj', edit_unit_path(unit), class: 'btn btn-xs btn-success' %>
+            
+            <% current_year = Date.today.year %>
+            <% bank_journal = unit.journals.find_by(year: current_year, journal_type_id: JournalType::BANK_TYPE_ID) %>
+            
+            <% if bank_journal && bank_journal.is_open %>
+              <%= link_to 'Usuń wpisy z ' + current_year.to_s, 
+                  clear_journal_entries_bank_accounts_path(unit_id: unit.id, year: current_year), 
+                  class: 'btn btn-xs btn-danger',
+                  data: { confirm: "Ta operacja usunie wszystkie wpisy z książki bankowej jednostki #{unit.name} za rok #{current_year}. Czy na pewno chcesz kontynuować?" } %>
+            <% end %>
+          </td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>
+
+<div class="row">
+  <div class="col-md-12">
+    <%= link_to 'Powrót do panelu administracyjnego', root_path, class: 'btn btn-sm btn-default' %>
+  </div>
+</div> 

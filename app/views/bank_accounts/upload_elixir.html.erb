@@ -1,0 +1,96 @@
+<% content_for :title do %>
+  Import danych bankowych Elixir
+<% end %>
+
+<h1>Import danych bankowych Elixir</h1>
+
+<div class="well">
+  <h3>Instrukcja</h3>
+  <p>
+    Na tej stronie możesz importować dane z plików bankowych w formacie Elixir. Ważne informacje:
+  </p>
+  <ul>
+    <li>Pliki muszą być w formacie Elixir (kolumny oddzielone przecinkami)</li>
+    <li>Nazwa pliku musi zawierać numer konta bankowego jednostki</li>
+    <li>Jednostka musi mieć włączoną opcję automatycznego importu danych bankowych</li>
+    <li>Do każdej jednostki zostanie utworzony wpis w księdze bankowej z odpowiednią datą</li>
+    <li>Import jest możliwy tylko do otwartych ksiąg bankowych za bieżący rok</li>
+    <li>Struktura pliku:
+      <ul>
+        <li>Kolumna 1: 111 (wpływ) lub 222 (wydatek)</li>
+        <li>Kolumna 2: Data w formacie YYYYMMDD</li>
+        <li>Kolumna 3: Kwota w groszach</li>
+        <li>Kolumny 12-13: Tytuł/opis transakcji</li>
+        <li>Kolumna 14: Unikalny identyfikator transakcji</li>
+      </ul>
+    </li>
+  </ul>
+  <p>
+    <strong>Uwaga:</strong> Importowane są tylko transakcje z bieżącego roku.
+  </p>
+</div>
+
+<div class="well">
+  <h3>Wczytaj pliki Elixir</h3>
+  <%= form_tag process_elixir_bank_accounts_path, multipart: true, class: 'form' do %>
+    <div class="form-group">
+      <%= label_tag :elixir_files, 'Pliki Elixir' %>
+      <%= file_field_tag 'elixir_files[]', multiple: true, class: 'form-control' %>
+      <small class="form-text text-muted">Możesz wybrać wiele plików naraz (max. 10MB łącznie)</small>
+    </div>
+    
+    <div class="form-group">
+      <%= submit_tag 'Importuj dane', class: 'btn btn-primary' %>
+    </div>
+  <% end %>
+</div>
+
+<hr>
+
+<h3>Lista jednostek z włączonym auto-importem</h3>
+<div class="well">
+  <div class="row">
+    <div class="col-md-12">
+      <table class="table table-striped table-condensed">
+        <thead>
+          <tr>
+            <th>Kod</th>
+            <th>Nazwa</th>
+            <th>Numer konta</th>
+            <th>Auto import</th>
+            <th>Status księgi bankowej</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% Unit.where(auto_bank_import: true).order(:code).each do |unit| %>
+            <% current_year = Date.today.year %>
+            <% bank_journal = unit.journals.find_by(year: current_year, journal_type_id: JournalType::BANK_TYPE_ID) %>
+            <tr>
+              <td><%= unit.code %></td>
+              <td><%= unit.name %></td>
+              <td><%= unit.bank_account.present? ? unit.bank_account : "-" %></td>
+              <td><%= render_boolean_icon_centered(unit.auto_bank_import) %></td>
+              <td>
+                <% if bank_journal %>
+                  <% if bank_journal.is_open %>
+                    <span class="label label-success">Księga otwarta</span>
+                  <% else %>
+                    <span class="label label-danger">Księga zamknięta</span>
+                  <% end %>
+                <% else %>
+                  <span class="label label-warning">Brak księgi bankowej za <%= current_year %></span>
+                <% end %>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-md-12">
+    <%= link_to 'Powrót do zarządzania kontami', bank_accounts_path, class: 'btn btn-sm btn-default' %>
+  </div>
+</div> 

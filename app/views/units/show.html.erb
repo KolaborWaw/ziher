@@ -25,6 +25,16 @@
       <b>Kod:</b>
       <%= @unit.code %>
   </p>
+  <p>
+      <b>Numer konta bankowego:</b>
+      <%= @unit.bank_account.present? ? @unit.bank_account : "Nie podano" %>
+  </p>
+  <% if current_user.is_superadmin %>
+  <p>
+      <b>Automatyczne ładowanie z banku (Elixir):</b>
+      <%= render_boolean_icon_centered(@unit.auto_bank_import) %>
+  </p>
+  <% end %>
 </div>
 
 <div class="well well-small">

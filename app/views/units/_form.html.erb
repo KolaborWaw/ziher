@@ -29,6 +29,28 @@
     </div>
   </div>
 
+  <div class="field">
+    <div class="row top-buffer-20">
+      <div class="col-md-6">
+        <%= f.label :bank_account, "Numer konta bankowego" %><br />
+        <%= f.text_field :bank_account, class: "form-control" %>
+      </div>
+    </div>
+  </div>
+
+  <% if current_user.is_superadmin %>
+  <div class="field">
+    <div class="row top-buffer-20">
+      <div class="col-md-6">
+        <div class="form-check">
+          <%= f.check_box :auto_bank_import, class: "form-check-input" %>
+          <%= f.label :auto_bank_import, "Automatyczne ładowanie z banku (Elixir)", class: "form-check-label" %>
+          <small class="form-text text-muted">Zaznacz, aby włączyć automatyczne ładowanie danych bankowych przez administratora</small>
+        </div>
+      </div>
+    </div>
+  </div>
+  <% end %>
 
   <div class="field">
     <div class="row top-buffer-20">

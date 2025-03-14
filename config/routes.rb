@@ -69,4 +69,15 @@ Rails.application.routes.draw do
   get "home/index"
 
   get 'audits/index'
+  
+  resources :bank_accounts, only: [:index] do
+    collection do
+      get :upload_associations
+      post :process_associations
+      get :upload_elixir
+      post :process_elixir
+      get :clear_journal_entries
+      post :perform_clear_journal_entries
+    end
+  end
 end
