@@ -61,6 +61,9 @@ class Grant < ApplicationRecord
   end
 
   def Grant.get_by_year(year)
-    Grant.includes(:categories).where(categories: {year: year})
+    cache_key = "grants_by_year_#{year}"
+    Rails.cache.fetch(cache_key, expires_in: 1.hour) do
+      Grant.includes(:categories).where(categories: {year: year})
+    end
   end
 end

@@ -50,4 +50,20 @@ module ApplicationHelper
     return formatted
   end
 
+  # Metody pomocnicze dla WickedPDF
+  
+  def wicked_pdf_stylesheet_link_tag(*sources)
+    stylesheet_link_tag(*sources, media: 'all')
+  end
+
+  def wicked_pdf_image_tag(img, options={})
+    if img[0] == "/"
+      new_image = "#{Rails.root}/public#{img}"
+    else
+      new_image = "#{Rails.root}/app/assets/images/#{img}"
+    end
+    
+    image_tag "file:///#{new_image}", options
+  end
+
 end

@@ -98,82 +98,266 @@ class Journal < ApplicationRecord
     get_category_sum_for(:amount_one_percent, category, to_date)
   end
 
+  def get_category_sum_for(field, category, to_date = end_of_year)
+    # Wielopoziomowy cache, prawidłowo obsługujący kategorie
+    @category_sums ||= {}
+    @category_sums[field] ||= {}
+    category_id = category.is_a?(Category) ? category.id : category
+    @category_sums[field][category_id] ||= {}
+    
+    # Cache hit dla konkretnej kategorii i daty końcowej
+    return @category_sums[field][category_id][to_date.to_s] if @category_sums[field][category_id][to_date.to_s]
+    
+    # Globalny cache między żądaniami
+    cache_key = "journal_#{id}_category_sum_#{field}_#{category_id}_#{to_date}"
+    sum = Rails.cache.fetch(cache_key, expires_in: 1.hour) do
+      total = 0
+      # Eager loading dla wszystkich powiązanych elementów
+      relevant_entries = entries_for_date_range(nil, to_date)
+        .includes(:items)
+        
+      # Oryginalna implementacja przetwarzania w pamięci
+      relevant_entries.each do |entry|
+        entry.items.each do |item|
+          if item.category_id == category_id && !item.send(field).nil?
+            total += item.send(field)
+          end
+        end
+      end
+      total
+    end
+
+    # Zapisanie wyniku w cache
+    @category_sums[field][category_id][to_date.to_s] = sum
+    
+    return sum
+  end
+
+  # returns sum of all incomes entries in this journal
+  def get_income_sum(to_date = end_of_year)
+    @get_income_sum ||= {}
+    return @get_income_sum[to_date.to_s] if @get_income_sum[to_date.to_s]
+    
+    # Globalny cache między żądaniami
+    cache_key = "journal_#{id}_income_sum_#{to_date}"
+    sum = Rails.cache.fetch(cache_key, expires_in: 1.hour) do
+      total = 0
+      # Eager loading dla wszystkich powiązanych elementów
+      relevant_entries = entries_for_date_range(nil, to_date)
+        .where(is_expense: false)
+        .includes(:items)
+        
+      # Oryginalna implementacja przetwarzania w pamięci
+      relevant_entries.each do |entry|
+        entry.items.each do |item|
+          if !item.amount.nil?
+            total += item.amount
+          end
+        end
+      end
+      total
+    end
+    
+    @get_income_sum[to_date.to_s] = sum
+    return sum
+  end
+
+  # returns sum of all incomes one percent entries in this journal
+  def get_income_sum_one_percent(to_date = end_of_year)
+    @get_income_sum_one_percent ||= {}
+    return @get_income_sum_one_percent[to_date.to_s] if @get_income_sum_one_percent[to_date.to_s]
+    
+    # Globalny cache między żądaniami
+    cache_key = "journal_#{id}_income_sum_one_percent_#{to_date}"
+    sum = Rails.cache.fetch(cache_key, expires_in: 1.hour) do
+      total = 0
+      # Eager loading dla wszystkich powiązanych elementów
+      relevant_entries = entries_for_date_range(nil, to_date)
+        .where(is_expense: false)
+        .includes(:items)
+        
+      # Oryginalna implementacja przetwarzania w pamięci
+      relevant_entries.each do |entry|
+        entry.items.each do |item|
+          if !item.amount_one_percent.nil?
+            total += item.amount_one_percent
+          end
+        end
+      end
+      total
+    end
+    
+    @get_income_sum_one_percent[to_date.to_s] = sum
+    return sum
+  end
+
+  # returns sum of all expense entries in this journal
+  def get_expense_sum(to_date = end_of_year)
+    @get_expense_sum ||= {}
+    return @get_expense_sum[to_date.to_s] if @get_expense_sum[to_date.to_s]
+    
+    # Globalny cache między żądaniami
+    cache_key = "journal_#{id}_expense_sum_#{to_date}"
+    sum = Rails.cache.fetch(cache_key, expires_in: 1.hour) do
+      total = 0
+      # Eager loading dla wszystkich powiązanych elementów
+      relevant_entries = entries_for_date_range(nil, to_date)
+        .where(is_expense: true)
+        .includes(:items)
+        
+      # Oryginalna implementacja przetwarzania w pamięci
+      relevant_entries.each do |entry|
+        entry.items.each do |item|
+          if !item.amount.nil?
+            total += item.amount
+          end
+        end
+      end
+      total
+    end
+    
+    @get_expense_sum[to_date.to_s] = sum
+    return sum
+  end
+
+  # returns sum of all expense one percent entries in this journal
+  def get_expense_sum_one_percent(to_date = end_of_year)
+    @get_expense_sum_one_percent ||= {}
+    return @get_expense_sum_one_percent[to_date.to_s] if @get_expense_sum_one_percent[to_date.to_s]
+    
+    # Globalny cache między żądaniami
+    cache_key = "journal_#{id}_expense_sum_one_percent_#{to_date}"
+    sum = Rails.cache.fetch(cache_key, expires_in: 1.hour) do
+      total = 0
+      # Eager loading dla wszystkich powiązanych elementów
+      relevant_entries = entries_for_date_range(nil, to_date)
+        .where(is_expense: true)
+        .includes(:items)
+        
+      # Oryginalna implementacja przetwarzania w pamięci  
+      relevant_entries.each do |entry|
+        entry.items.each do |item|
+          if !item.amount_one_percent.nil?
+            total += item.amount_one_percent
+          end
+        end
+      end
+      total
+    end
+    
+    @get_expense_sum_one_percent[to_date.to_s] = sum
+    return sum
+  end
+
+  # returns sum of all income entries in this journal for given grant
+  def get_income_sum_for_grant(grant, to_date = end_of_year)
+    # Wielopoziomowy cache
+    @get_income_sum_for_grant ||= {}
+    grant_id = grant.is_a?(Grant) ? grant.id : grant
+    @get_income_sum_for_grant[grant_id] ||= {}
+    
+    # Cache hit dla konkretnej dotacji i daty końcowej
+    return @get_income_sum_for_grant[grant_id][to_date.to_s] if @get_income_sum_for_grant[grant_id][to_date.to_s]
+    
+    # Globalny cache między żądaniami
+    cache_key = "journal_#{id}_income_sum_for_grant_#{grant_id}_#{to_date}"
+    sum = Rails.cache.fetch(cache_key, expires_in: 1.hour) do
+      total = 0
+      # Ładowanie wszystkich potrzebnych danych za jednym razem (eager loading)
+      relevant_entries = entries_for_date_range(nil, to_date)
+        .where(is_expense: false)
+        .includes(:items => :item_grants)
+      
+      # Oryginalna implementacja przetwarzania w pamięci
+      relevant_entries.each do |entry|
+        entry.items.each do |item|
+          item.item_grants.each do |item_grant|
+            if item_grant.grant_id == grant_id && !item_grant.amount.nil?
+              total += item_grant.amount
+            end
+          end
+        end
+      end
+      total
+    end
+    
+    # Zapisanie wyniku w cache
+    @get_income_sum_for_grant[grant_id][to_date.to_s] = sum
+    return sum
+  end
+
+  # returns sum of all expense entries in this journal for given grant
+  def get_expense_sum_for_grant(grant, to_date = end_of_year)
+    # Wielopoziomowy cache
+    @get_expense_sum_for_grant ||= {}
+    grant_id = grant.is_a?(Grant) ? grant.id : grant
+    @get_expense_sum_for_grant[grant_id] ||= {}
+    
+    # Cache hit dla konkretnej dotacji i daty końcowej  
+    return @get_expense_sum_for_grant[grant_id][to_date.to_s] if @get_expense_sum_for_grant[grant_id][to_date.to_s]
+    
+    # Globalny cache między żądaniami
+    cache_key = "journal_#{id}_expense_sum_for_grant_#{grant_id}_#{to_date}"
+    sum = Rails.cache.fetch(cache_key, expires_in: 1.hour) do
+      total = 0
+      # Ładowanie wszystkich potrzebnych danych za jednym razem (eager loading)
+      relevant_entries = entries_for_date_range(nil, to_date)
+        .where(is_expense: true)
+        .includes(:items => :item_grants)
+      
+      # Oryginalna implementacja przetwarzania w pamięci
+      relevant_entries.each do |entry|
+        entry.items.each do |item|
+          item.item_grants.each do |item_grant|
+            if item_grant.grant_id == grant_id && !item_grant.amount.nil?
+              total += item_grant.amount
+            end
+          end
+        end
+      end
+      total
+    end
+    
+    # Zapisanie wyniku w cache
+    @get_expense_sum_for_grant[grant_id][to_date.to_s] = sum
+    return sum
+  end
+
   # returns sum of all entries in this journal for given category
   def get_sum_for_grant_in_category(grant, category, to_date = end_of_year)
+    # Wielopoziomowy cache dla wyników
+    @get_sum_for_grant_in_category ||= {}
     grant_id = grant.is_a?(Grant) ? grant.id : grant
-    entries_to_date = entries.select { |entry| entry.date <= to_date}
-    entries_to_date.map(&:items).flatten.select do |item|
-      item.category == category && item.item_grants.map(&:grant_id).include?(grant_id)
-    end.map(&:item_grants).flatten.sum{ |gi| gi.amount.nil? ? 0 : gi.amount }
-  end
-
-  def get_category_sum_for(summable, category, to_date)
-    entries_to_date = entries.select { |entry| entry.date <= to_date}
-
-    category = Array.wrap(category)
-
-    items = entries_to_date.map(&:items).flatten.select { |item| item.category_id.in?(category.map(&:id)) }
-    items.sum do |item|
-      if item.respond_to?(summable)
-        amount = item.send(summable)
-        amount.nil? ? 0 : amount
+    category_id = category.is_a?(Category) ? category.id : category
+    
+    @get_sum_for_grant_in_category[grant_id] ||= {}
+    @get_sum_for_grant_in_category[grant_id][category_id] ||= {}
+    
+    # Cache hit dla dotacji, kategorii i daty końcowej
+    return @get_sum_for_grant_in_category[grant_id][category_id][to_date.to_s] if @get_sum_for_grant_in_category[grant_id][category_id][to_date.to_s]
+    
+    # Globalny cache między żądaniami
+    cache_key = "journal_#{id}_sum_for_grant_#{grant_id}_category_#{category_id}_#{to_date}"
+    sum = Rails.cache.fetch(cache_key, expires_in: 1.hour) do
+      total = 0
+      # Ładujemy dane jednym zapytaniem z eager loadingiem
+      relevant_entries = entries_for_date_range(nil, to_date).includes(items: :item_grants)
+      
+      # Bezpośrednie sumowanie z wykorzystaniem załadowanych relacji
+      relevant_entries.each do |entry|
+        entry.items.each do |item|
+          next unless item.category_id == category_id
+          item.item_grants.each do |gi|
+            total += gi.amount if gi.grant_id == grant_id && !gi.amount.nil?
+          end
+        end
       end
+      total
     end
-  end
-
-  # returns sum of all expense entries
-  def get_expense_sum(to_date = end_of_year)
-    sum = 0
-    Category.where(:year => self.year, :is_expense => true).each do |category|
-      sum += get_sum_for_category(category, to_date)
-    end
-    sum
-  end
-
-  # returns sum of all one percent expense entries
-  def get_expense_sum_one_percent
-    return @get_expense_sum_one_percent if @get_expense_sum_one_percent
-
-    @get_expense_sum_one_percent = 0
-    Category.where(:year => self.year, :is_expense => true).each do |category|
-      @get_expense_sum_one_percent += get_sum_one_percent_for_category(category, end_of_year)
-    end
-    @get_expense_sum_one_percent
-  end
-
-  # returns sum of all grant expense entries
-  def get_expense_sum_for_grant(grant, to_date = end_of_year)
-    sum = 0
-    Category.where(:year => self.year, :is_expense => true).each do |category|
-      sum += get_sum_for_grant_in_category(grant, category, to_date)
-    end
-    sum
-  end
-
-  # returns sum of all income entries
-  def get_income_sum(to_date = end_of_year)
-    sum = 0
-    Category.where(:year => self.year, :is_expense => false).each do |category|
-      sum += get_sum_for_category(category, to_date)
-    end
-    sum
-  end
-
-  # returns sum of all one percent income entries
-  def get_income_sum_one_percent
-    return @get_income_sum_one_percent if @get_income_sum_one_percent
-
-    @get_income_sum_one_percent = 0
-    Category.where(:year => self.year, :is_expense => false, :is_one_percent => true).each do |category|
-      @get_income_sum_one_percent += get_sum_one_percent_for_category(category, end_of_year)
-    end
-    @get_income_sum_one_percent
-  end
-
-  # returns sum of all grant income entries
-  def get_income_sum_for_grant(grant, to_date = end_of_year)
-    category = grant.get_category_by_year(self.year)
-    get_sum_for_category(category, to_date)
+    
+    # Zapisanie wyniku w cache instancji
+    @get_sum_for_grant_in_category[grant_id][category_id][to_date.to_s] = sum
+    return sum
   end
 
   def get_balance(to_date = end_of_year)
@@ -193,7 +377,13 @@ class Journal < ApplicationRecord
   end
 
   def get_balance_for_grant(grant, to_date = end_of_year)
-    self.initial_balance_for_grant(grant) + get_income_sum_for_grant(grant, to_date) - get_expense_sum_for_grant(grant, to_date)
+    # Globalny cache między żądaniami
+    grant_id = grant.is_a?(Grant) ? grant.id : grant
+    cache_key = "journal_#{id}_balance_for_grant_#{grant_id}_#{to_date}"
+    
+    Rails.cache.fetch(cache_key, expires_in: 1.hour) do
+      self.initial_balance_for_grant(grant) + get_income_sum_for_grant(grant, to_date) - get_expense_sum_for_grant(grant, to_date)
+    end
   end
 
   def get_final_balance_for_grant(grant)
@@ -322,14 +512,23 @@ class Journal < ApplicationRecord
 
   def verify_balance_for_grants_not_less_than_zero(to_date = end_of_year)
     result = true
-
+    
+    # Wyliczamy wszystkie salda z góry
+    grant_balances = {}
+    
     Grant.all.each do |grant|
-      if self.get_balance_for_grant(grant, to_date) < 0
-        errors[:grants] << "Saldo końcowe dla dotacji " + grant.name + " (" + self.get_balance_for_grant(grant, to_date).to_s + ") nie może być mniejsze niż zero"
+      grant_balances[grant.id] = self.get_balance_for_grant(grant, to_date)
+    end
+    
+    # Teraz weryfikujemy bez ponownego przeliczania
+    Grant.all.each do |grant|
+      balance = grant_balances[grant.id]
+      if balance < 0
+        errors[:grants] << "Saldo końcowe dla dotacji " + grant.name + " (" + balance.to_s + ") nie może być mniejsze niż zero"
         result = false
       end
     end
-
+    
     return result
   end
 
@@ -380,13 +579,21 @@ class Journal < ApplicationRecord
   end
 
   def verify_journal(blocked_to = end_of_year)
-    result = true
-    result = false unless verify_balance_one_percent_not_less_than_zero(blocked_to)
-    result = false unless verify_balance_for_grants_not_less_than_zero(blocked_to)
-    result = false unless verify_balance_for_one_percent_and_grants_no_more_than_sum(blocked_to)
-    result = false unless verify_entries(blocked_to)
-    result = false unless verify_inventory
-    return result
+    # Zapamiętaj stan błędów przed weryfikacją
+    current_errors_count = errors.count
+    
+    # Przygotuj wszystkie niezbędne dane do weryfikacji
+    entries_to_check = entries_for_date_range(nil, blocked_to).includes(:items)
+    
+    # Uruchom wszystkie weryfikacje razem
+    verify_balance_one_percent_not_less_than_zero(blocked_to)
+    verify_balance_for_grants_not_less_than_zero(blocked_to)
+    verify_balance_for_one_percent_and_grants_no_more_than_sum(blocked_to)
+    verify_entries(blocked_to)
+    verify_inventory
+    
+    # Sprawdź, czy pojawiły się nowe błędy
+    return errors.count == current_errors_count
   end
 
   def close(blocked_to = end_of_year)
@@ -488,5 +695,29 @@ class Journal < ApplicationRecord
     end
 
     return true
+  end
+
+  # Returns entries for which date is between from_date and to_date. If any of the dates is nil,
+  # it's not included in the constraints. So "to_date = nil" means "everything till the end"
+  def entries_for_date_range(from_date = nil, to_date = nil)
+    # Wielopoziomowy cache dla wyników zapytań
+    @cached_entries_for_date_range ||= {}
+    cache_key = "#{from_date}_#{to_date}"
+    return @cached_entries_for_date_range[cache_key] if @cached_entries_for_date_range[cache_key]
+    
+    # Budujemy zapytanie tylko z potrzebnymi warunkami
+    result = self.entries
+    
+    # Używamy polecenia BETWEEN gdy mamy oba parametry
+    if from_date.present? && to_date.present?
+      result = result.where("date BETWEEN ? AND ?", from_date, to_date)
+    elsif from_date.present?
+      result = result.where("date >= ?", from_date)
+    elsif to_date.present?
+      result = result.where("date <= ?", to_date)
+    end
+    
+    @cached_entries_for_date_range[cache_key] = result
+    return result
   end
 end

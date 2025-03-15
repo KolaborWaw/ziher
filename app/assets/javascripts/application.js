@@ -49,3 +49,67 @@ $(document).ready(function () {
         }
     });
 });
+
+// Funkcje do zapisywania preferencji użytkownika w localStorage
+function saveUserPreference(key, value) {
+  try {
+    localStorage.setItem('ziher_' + key, value);
+  } catch (e) {
+    console.warn('Nie można zapisać preferencji w localStorage:', e);
+  }
+}
+
+function getUserPreference(key, defaultValue) {
+  try {
+    var value = localStorage.getItem('ziher_' + key);
+    return value !== null ? value : defaultValue;
+  } catch (e) {
+    console.warn('Nie można odczytać preferencji z localStorage:', e);
+    return defaultValue;
+  }
+}
+
+// Zapisywanie wybranej jednostki
+$(document).on('change', 'select[name="unit_select"]', function() {
+  saveUserPreference('selected_unit_id', $(this).val());
+});
+
+// Zapisywanie wybranego roku
+$(document).on('change', 'select[name="year_select"]', function() {
+  saveUserPreference('selected_year', $(this).val());
+});
+
+// Zapisywanie preferencji paginacji
+$(document).on('change', 'select[name="items_per_page"]', function() {
+  saveUserPreference('items_per_page', $(this).val());
+});
+
+// Inicjalizacja przy załadowaniu strony
+$(document).ready(function() {
+  // Ustawienie zapamiętanej jednostki jeśli istnieje i nie została już wybrana
+  var storedUnitId = getUserPreference('selected_unit_id', null);
+  if (storedUnitId) {
+    var unitSelect = $('select[name="unit_select"]');
+    if (unitSelect.length && !unitSelect.val()) {
+      unitSelect.val(storedUnitId);
+    }
+  }
+  
+  // Ustawienie zapamiętanego roku jeśli istnieje i nie został już wybrany
+  var storedYear = getUserPreference('selected_year', null);
+  if (storedYear) {
+    var yearSelect = $('select[name="year_select"]');
+    if (yearSelect.length && !yearSelect.val()) {
+      yearSelect.val(storedYear);
+    }
+  }
+  
+  // Ustawienie zapamiętanej liczby elementów na stronę
+  var storedItemsPerPage = getUserPreference('items_per_page', null);
+  if (storedItemsPerPage) {
+    var itemsSelect = $('select[name="items_per_page"]');
+    if (itemsSelect.length) {
+      itemsSelect.val(storedItemsPerPage);
+    }
+  }
+});

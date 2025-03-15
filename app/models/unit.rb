@@ -17,8 +17,14 @@ class Unit < ApplicationRecord
       return Unit.where(is_active: is_active)
     end
 
-    return Unit.find_all_by_user(user)
-               .select{|unit| unit.is_active == is_active and user.can_view_unit_entries(unit)}
+    # Tworzymy klucz cache uwzględniający ID użytkownika i wartość is_active
+    cache_key = "user_#{user.id}_units_#{is_active}"
+    
+    # Próba pobrania z pamięci podręcznej Rails
+    Rails.cache.fetch(cache_key, expires_in: 30.minutes) do
+      Unit.find_all_by_user(user)
+        .select{|unit| unit.is_active == is_active and user.can_view_unit_entries(unit)}
+    end
   end
 
   def Unit.get_default_unit(user, unit_id = nil)
@@ -42,9 +48,21 @@ class Unit < ApplicationRecord
   # Returns years for which the unit has journals of given type, plus current year.
   # Years are sorted oldest first.
   def find_journal_years(journal_type)
+    # Tworzę klucz pamięci podręcznej, który zawiera ID jednostki i typ dziennika
+    cache_key = "unit_#{id}_journal_type_#{journal_type.id}_years"
+    
+    # Sprawdzam, czy dane są już w pamięci podręcznej instancji
+    @cached_years ||= {}
+    return @cached_years[cache_key] if @cached_years[cache_key]
+    
+    # Wykonanie głównego zapytania, jeśli dane nie są w pamięci podręcznej
     result = self.journals.where(journal_type_id: journal_type.id).map{|journal| journal.year}
     result << Time.now.year
-    result.uniq.sort
+    
+    # Zapisanie wyniku w pamięci podręcznej instancji
+    @cached_years[cache_key] = result.uniq.sort
+    
+    return @cached_years[cache_key]
   end
 
   def initial_finance_balance(year)

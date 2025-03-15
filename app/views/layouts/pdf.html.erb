@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>ZiHeR - Raport PDF</title>
+  
+  <style>
+    body {
+      font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
+      font-size: 10px;
+      line-height: 1.4;
+      color: #000;
+      margin: 0;
+      padding: 10px;
+      background-color: #ffffff; /* Jednolite białe tło */
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 15px;
+      background-color: #ffffff; /* Jednolite białe tło dla tabel */
+    }
+    
+    th, td {
+      border-top: 1px solid #000;
+      border-bottom: 1px solid #000;
+      border-left: 0;
+      border-right: 0;
+      padding: 4px;
+      text-align: left;
+      background-color: transparent; /* Usunięcie jakiegokolwiek tła */
+    }
+    
+    th {
+      font-weight: bold;
+      background-color: transparent; /* Usunięcie tła z nagłówków */
+    }
+    
+    tr:nth-child(odd), tr:nth-child(even) {
+      background-color: transparent; /* Usunięcie paskowatych kolorów wierszy */
+    }
+    
+    .text-right {
+      text-align: right;
+    }
+    
+    .text-center {
+      text-align: center;
+    }
+    
+    .text-left {
+      text-align: left;
+    }
+
+    .page-break {
+      page-break-after: always;
+    }
+    
+    /* Dodatkowe zabezpieczenie przed stylami Bootstrap */
+    .table-striped > tbody > tr:nth-of-type(odd) {
+      background-color: transparent;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <%= yield %>
+  </div>
+</body>
+</html> 
