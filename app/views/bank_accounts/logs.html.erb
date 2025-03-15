@@ -1,0 +1,95 @@
+<% content_for :title do %>Logi importu bankowego<% end %>
+
+<div class="breadcrumbs">
+  <%= link_to "Start", root_path %> &raquo;
+  <%= link_to "Import z banku", bank_accounts_path %> &raquo;
+  Logi importu
+</div>
+
+<div class="panel panel-default">
+  <div class="panel-heading">
+    <h1>Logi importu bankowego</h1>
+    <p class="text-muted">Rejestr wszystkich operacji importu danych bankowych</p>
+  </div>
+  
+  <div class="panel-body">
+    <%= link_to 'Powrót do zarządzania kontami', bank_accounts_path, class: 'btn btn-sm btn-default' %>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-striped table-hover">
+      <thead>
+        <tr>
+          <th>Data importu</th>
+          <th>Użytkownik</th>
+          <th>Jednostka</th>
+          <th>Plik</th>
+          <th>Numer konta</th>
+          <th>Rok</th>
+          <th>Status</th>
+          <th>Sukces</th>
+          <th>Błędy</th>
+          <th>Szczegóły błędów</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @logs.each do |log| %>
+          <tr class="<%= log.error_count > 0 ? 'danger' : 'success' %>">
+            <td><%= log.import_date.strftime('%Y-%m-%d %H:%M:%S') if log.import_date %></td>
+            <td><%= log.user.email if log.user %></td>
+            <td><%= log.unit.name if log.unit %></td>
+            <td><%= log.file_name %></td>
+            <td><%= log.account_number %></td>
+            <td><%= log.year %></td>
+            <td>
+              <% if log.successful? %>
+                <span class="label label-success">Pełny sukces</span>
+              <% elsif log.partially_successful? %>
+                <span class="label label-warning">Częściowy sukces</span>
+              <% else %>
+                <span class="label label-danger">Błąd</span>
+              <% end %>
+            </td>
+            <td><%= log.success_count %></td>
+            <td><%= log.error_count %></td>
+            <td>
+              <% if log.error_count > 0 %>
+                <button type="button" class="btn btn-xs btn-danger" data-toggle="modal" data-target="#errorModal<%= log.id %>">
+                  Pokaż błędy
+                </button>
+                
+                <!-- Modal -->
+                <div class="modal fade" id="errorModal<%= log.id %>" tabindex="-1" role="dialog" aria-labelledby="errorModalLabel<%= log.id %>">
+                  <div class="modal-dialog modal-lg" role="document">
+                    <div class="modal-content">
+                      <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                        <h4 class="modal-title" id="errorModalLabel<%= log.id %>">Błędy importu - <%= log.file_name %></h4>
+                      </div>
+                      <div class="modal-body">
+                        <ul class="list-group">
+                          <% log.error_messages.each do |error| %>
+                            <li class="list-group-item list-group-item-danger"><%= error %></li>
+                          <% end %>
+                        </ul>
+                      </div>
+                      <div class="modal-footer">
+                        <button type="button" class="btn btn-default" data-dismiss="modal">Zamknij</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              <% else %>
+                -
+              <% end %>
+            </td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="panel-footer">
+    <%= paginate @logs if defined?(paginate) %>
+  </div>
+</div> 

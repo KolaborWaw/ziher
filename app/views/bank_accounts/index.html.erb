@@ -10,9 +10,51 @@
       <h4>Akcje</h4>
       <%= link_to 'Zarządzaj numerami kont', upload_associations_bank_accounts_path, class: 'btn btn-sm btn-success' %>
       <%= link_to 'Importuj dane Elixir', upload_elixir_bank_accounts_path, class: 'btn btn-sm btn-primary' %>
+      <%= link_to 'Zobacz logi importu', logs_bank_accounts_path, class: 'btn btn-sm btn-info' %>
     </div>
   </div>
 </div>
+
+<% if @import_logs.any? %>
+<div class="well">
+  <h3>Ostatnie importy</h3>
+  <div class="table-responsive">
+    <table class="table table-striped table-condensed">
+      <thead>
+        <tr>
+          <th>Data</th>
+          <th>Jednostka</th>
+          <th>Plik</th>
+          <th>Status</th>
+          <th>Sukces/Błędy</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @import_logs.each do |log| %>
+          <tr class="<%= log.error_count > 0 ? 'danger' : 'success' %>">
+            <td><%= log.import_date.strftime('%Y-%m-%d %H:%M') if log.import_date %></td>
+            <td><%= log.unit.name if log.unit %></td>
+            <td><%= log.file_name %></td>
+            <td>
+              <% if log.successful? %>
+                <span class="label label-success">Sukces</span>
+              <% elsif log.partially_successful? %>
+                <span class="label label-warning">Częściowy</span>
+              <% else %>
+                <span class="label label-danger">Błąd</span>
+              <% end %>
+            </td>
+            <td><%= log.success_count %>/<%= log.error_count %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+  <div class="text-right">
+    <%= link_to 'Zobacz wszystkie logi', logs_bank_accounts_path, class: 'btn btn-sm btn-default' %>
+  </div>
+</div>
+<% end %>
 
 <div class="well">
   <h3>Lista jednostek z kontami bankowymi</h3>
