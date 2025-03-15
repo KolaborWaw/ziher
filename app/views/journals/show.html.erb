@@ -156,11 +156,19 @@
   <% if @entries.any? %>
     <tbody class="border-top-bold">
     <% position = @start_position %>
+    <% main_position = position %>
     <% @entries.each do |entry| %>
       <tr>
         <td>
           <small>
-            <span style="display: block;"><%= position+=1 %>.</span>
+            <% if entry.is_subentry %>
+              <%# Dla podpozycji nie zwiększamy głównego licznika, używamy numeru wpisu nadrzędnego %>
+              <span style="display: block;"><%= entry.position_label(main_position) %>.</span>
+            <% else %>
+              <%# Dla głównych wpisów zwiększamy licznik i ustawiamy jako main_position %>
+              <% main_position = position += 1 %>
+              <span style="display: block;"><%= entry.subentries_count > 1 ? entry.position_label(main_position) : main_position %>.</span>
+            <% end %>
             <% if @journal.is_not_blocked(entry.date) %>
               <% if can? :update, entry %><%= link_to edit_entry_path(entry) do%><span class="glyphicon glyphicon-pencil" title="Edytuj"></span><%end%><% end %>
               <% if @journal.journal_type_id == JournalType::BANK_TYPE_ID && @journal.unit.auto_bank_import && !current_user.is_superadmin %>

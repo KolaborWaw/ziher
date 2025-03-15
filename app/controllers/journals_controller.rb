@@ -45,7 +45,17 @@ class JournalsController < ApplicationController
 
     @categories_expense = Category.find_by_year_and_type(@journal.year, true)
     @categories_income = Category.find_by_year_and_type(@journal.year, false)
-    all_entries = @journal.entries.includes({ items: [:category, :grants, { item_grants: :grant }] }).order('date', 'id')
+    
+    # Sortowanie wpisów z uwzględnieniem podpozycji
+    all_entries = if @journal.journal_type_id == JournalType::BANK_TYPE_ID
+      # Dla księgi bankowej: sortowanie po dacie, a następnie najpierw wpisy główne, a potem podpozycje
+      @journal.entries.includes({ items: [:category, :grants, { item_grants: :grant }] })
+              .order('date', 'is_subentry', 'subentry_position', 'id')
+    else
+      # Dla pozostałych ksiąg: standardowe sortowanie
+      @journal.entries.includes({ items: [:category, :grants, { item_grants: :grant }] })
+              .order('date', 'id')
+    end
 
     if params[:items].blank?
       @items = nil

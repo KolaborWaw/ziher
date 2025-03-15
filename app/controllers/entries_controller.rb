@@ -50,6 +50,25 @@ class EntriesController < ApplicationController
       # Próba zapisania wpisu
       begin
         save_success = @entry.save
+        
+        # Obsługa podpozycji dla księgi bankowej
+        Rails.logger.info "** PODPOZYCJE KONTROLER CREATE: Sprawdzam warunki dla podpozycji"
+        Rails.logger.info "** PODPOZYCJE KONTROLER CREATE: can_have_subentries=#{@entry.can_have_subentries?}, params=#{params[:subentries_count]}"
+        
+        if save_success && @entry.can_have_subentries?
+          subentries_count = params[:subentries_count].to_i
+          Rails.logger.info "** PODPOZYCJE KONTROLER CREATE: Wybrana liczba podpozycji: #{subentries_count}"
+          
+          if subentries_count > 0 && subentries_count <= 9
+            Rails.logger.info "** PODPOZYCJE KONTROLER CREATE: Wywołuję update_subentries(#{subentries_count - 1})"
+            @entry.update_subentries(subentries_count - 1) # -1 ponieważ główny wpis liczy się jako pierwsza podpozycja
+          else
+            Rails.logger.info "** PODPOZYCJE KONTROLER CREATE: Nieprawidłowa liczba podpozycji: #{subentries_count}"
+          end
+        else
+          Rails.logger.info "** PODPOZYCJE KONTROLER CREATE: Nie spełniono warunków do utworzenia podpozycji"
+        end
+        
       rescue => e
         # Obsługa błędów podczas zapisywania
         Rails.logger.error("Błąd podczas tworzenia wpisu: #{e.message}")
@@ -166,6 +185,45 @@ class EntriesController < ApplicationController
       # Próba aktualizacji wpisu
       begin
         update_success = @entry.update_attributes(entry_params)
+        
+        # Synchronizuj datę wyciągu i numer wyciągu z podpozycjami dla wpisów w księdze bankowej
+        if update_success && @entry.journal && @entry.journal.journal_type_id == JournalType::BANK_TYPE_ID && !@entry.is_subentry && @entry.subentries.any?
+          Rails.logger.info "** PODPOZYCJE KONTROLER UPDATE: Aktualizuję datę i numer wyciągu w podpozycjach"
+          
+          # Pobierz datę i numer wyciągu z głównego wpisu
+          date_value = @entry.date
+          statement_number_value = @entry.statement_number
+          
+          # Zaktualizuj te same wartości we wszystkich podpozycjach
+          @entry.subentries.each do |subentry|
+            Rails.logger.info "** PODPOZYCJE KONTROLER UPDATE: Aktualizuję podpozycję #{subentry.id}"
+            subentry.update_columns(
+              date: date_value,
+              statement_number: statement_number_value
+            )
+          end
+          
+          Rails.logger.info "** PODPOZYCJE KONTROLER UPDATE: Zakończono aktualizację podpozycji"
+        end
+        
+        # Obsługa podpozycji dla głównych wpisów w księdze bankowej
+        Rails.logger.info "** PODPOZYCJE KONTROLER UPDATE: Sprawdzam warunki dla podpozycji"
+        Rails.logger.info "** PODPOZYCJE KONTROLER UPDATE: can_have_subentries=#{@entry.can_have_subentries?}, params=#{params[:subentries_count]}"
+        
+        if update_success && @entry.can_have_subentries?
+          subentries_count = params[:subentries_count].to_i
+          Rails.logger.info "** PODPOZYCJE KONTROLER UPDATE: Wybrana liczba podpozycji: #{subentries_count}"
+          
+          if subentries_count >= 0 && subentries_count <= 9
+            Rails.logger.info "** PODPOZYCJE KONTROLER UPDATE: Wywołuję update_subentries(#{subentries_count - 1})"
+            @entry.update_subentries(subentries_count - 1) # -1 ponieważ główny wpis liczy się jako pierwsza podpozycja
+          else
+            Rails.logger.info "** PODPOZYCJE KONTROLER UPDATE: Nieprawidłowa liczba podpozycji: #{subentries_count}"
+          end
+        else
+          Rails.logger.info "** PODPOZYCJE KONTROLER UPDATE: Nie spełniono warunków do utworzenia podpozycji"
+        end
+        
       rescue => e
         # Obsługa błędów podczas aktualizacji
         Rails.logger.error("Błąd podczas aktualizacji wpisu: #{e.message}")
@@ -279,6 +337,7 @@ class EntriesController < ApplicationController
     # Kopiujemy podstawowe dane z głównego wpisu
     linked_entry.date = entry.date
     linked_entry.name = entry.name
+    linked_entry.document_date = entry.document_date if entry.respond_to?(:document_date)
     
     # Upewniamy się, że linked_entry ma zawsze przeciwny typ do głównego wpisu
     linked_entry.is_expense = !entry.is_expense
@@ -298,6 +357,12 @@ class EntriesController < ApplicationController
       linked_entry.journal_id = other_journals.first.id if other_journals.any?
     end
     
+    # Resetowanie pól związanych z podpozycjami
+    linked_entry.is_subentry = false
+    linked_entry.parent_entry_id = nil
+    linked_entry.subentry_position = nil
+    linked_entry.subentries_count = 1
+    
     return linked_entry
   end
 
@@ -305,7 +370,7 @@ class EntriesController < ApplicationController
 
   def entry_params
     if params[:entry]
-      params.require(:entry).permit(:date, :document_date, :name, :document_number, :statement_number, :journal_id, :is_expense, :linked_entry,
+      params.require(:entry).permit(:date, :document_date, :name, :document_number, :statement_number, :journal_id, :is_expense, :linked_entry, :subentries_count,
                                     :items_attributes => [:id, :amount, :amount_one_percent, :category_id, :grant_id,
                                       :item_grants_attributes => [:id, :amount, :grant_id, :item_id]])
     end

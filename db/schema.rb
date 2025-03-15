@@ -67,6 +67,10 @@ ActiveRecord::Schema.define(version: 2025_03_14_235355) do
     t.integer "subentry_count", default: 1
     t.bigint "parent_entry_id"
     t.date "document_date"
+    t.boolean "is_subentry", default: false
+    t.string "subentry_position"
+    t.integer "subentries_count", default: 1
+    t.index ["is_subentry"], name: "index_entries_on_is_subentry"
     t.index ["journal_id"], name: "index_entries_on_journal_id"
     t.index ["parent_entry_id"], name: "index_entries_on_parent_entry_id"
   end

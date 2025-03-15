@@ -22,7 +22,7 @@
           <% if @journal.journal_type_id == JournalType::BANK_TYPE_ID %>
             <div class="col-md-3">
               <%= f.label :date, "Data wyciągu" %> <span class="text-danger">*</span>
-              <% if @is_auto_import_bank && !current_user.is_superadmin %>
+              <% if @is_auto_import_bank && !current_user.is_superadmin || @entry.is_subentry %>
                 <%= f.text_field :date, class: "form-control", required: true, disabled: true %>
                 <%= f.hidden_field :date %>
               <% else %>
@@ -35,7 +35,12 @@
             </div>
             <div class="col-md-3">
               <%= f.label :Numer_wyciągu %> <span class="text-danger">*</span>
-              <%= f.text_field :statement_number, class: "form-control", required: true %>
+              <% if @is_auto_import_bank && !current_user.is_superadmin || @entry.is_subentry %>
+                <%= f.text_field :statement_number, class: "form-control", required: true, disabled: true %>
+                <%= f.hidden_field :statement_number %>
+              <% else %>
+                <%= f.text_field :statement_number, class: "form-control", required: true %>
+              <% end %>
             </div>
             <div class="col-md-3">
               <%= f.label :Numer_dokumentu %>
@@ -58,6 +63,31 @@
             <%= f.text_field :name, class: "form-control", required: true %>
           </div>
         </div>
+        
+        <% if @journal.journal_type_id == JournalType::BANK_TYPE_ID %>
+        <div class="row top-buffer-20">
+          <div class="col-md-6">
+            <% if @entry.is_subentry %>
+              <!-- Dla podpozycji pokazujemy tylko informację -->
+              <label>Liczba podpozycji:</label>
+              <p class="form-control-static">To jest podpozycja wpisu głównego</p>
+              <input type="hidden" name="subentries_count" value="1">
+            <% else %>
+              <!-- Dla głównych wpisów w księdze bankowej pokazujemy selektor liczby podpozycji -->
+              <label for="subentries_count">Liczba podpozycji:</label>
+              <select name="subentries_count" id="subentries_count" class="form-control">
+                <% (1..9).each do |i| %>
+                  <option value="<%= i %>" <%= 'selected' if @entry.subentries_count == i || (i == 1 && @entry.id.nil?) %>><%= i %></option>
+                <% end %>
+              </select>
+              <input type="hidden" name="has_subentries_selector" value="true">
+              <div class="help-block">
+                <small class="text-muted">Liczba podpozycji (łącznie z głównym wpisem). Dla wartości większych niż 1, wpisy będą pokazywane jako 2a, 2b, 2c itd.</small>
+              </div>
+            <% end %>
+          </div>
+        </div>
+        <% end %>
         
         <% if @entry.id.present? && params[:type_changed].blank? %>
         <%# Pokaż opcję zmiany typu tylko podczas edycji istniejącego wpisu (nie przy dodawaniu) %>

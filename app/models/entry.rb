@@ -7,6 +7,10 @@ class Entry < ApplicationRecord
   has_many :items, dependent: :destroy
   belongs_to :journal
   has_one :linked_entry, :class_name => "Entry", :foreign_key => "linked_entry_id"
+  
+  # Relacje dla podpozycji
+  belongs_to :parent_entry, class_name: "Entry", foreign_key: "parent_entry_id", optional: true
+  has_many :subentries, class_name: "Entry", foreign_key: "parent_entry_id", dependent: :destroy
 
   accepts_nested_attributes_for :items
   accepts_nested_attributes_for :linked_entry
@@ -232,5 +236,131 @@ class Entry < ApplicationRecord
     is_expense_changed = changes.key?('is_expense') && changes['is_expense'][0] != changes['is_expense'][1]
     
     is_expense_changed
+  end
+
+  # Metody dla podpozycji
+  
+  # Czy wpis może mieć podpozycje (tylko główne wpisy w księdze bankowej mogą mieć podpozycje)
+  def can_have_subentries?
+    result = !is_subentry && journal && journal.journal_type_id == JournalType::BANK_TYPE_ID
+    Rails.logger.info "** PODPOZYCJE: can_have_subentries? = #{result} (is_subentry=#{is_subentry}, journal=#{journal&.id}, type=#{journal&.journal_type_id}, bank_type=#{JournalType::BANK_TYPE_ID})"
+    result
+  end
+  
+  # Pobieranie oznaczenia pozycji (np. "2a", "2b")
+  def position_label(position)
+    return position.to_s unless can_have_subentries? || is_subentry
+    
+    if is_subentry
+      "#{position}#{subentry_position}"
+    else
+      "#{position}a"
+    end
+  end
+  
+  # Tworzenie lub aktualizacja podpozycji
+  def update_subentries(new_count)
+    Rails.logger.info "** PODPOZYCJE: Wywołano update_subentries z liczbą #{new_count}"
+    
+    unless can_have_subentries?
+      Rails.logger.info "** PODPOZYCJE: Nie można utworzyć podpozycji. is_subentry=#{is_subentry}, journal_present=#{journal.present?}, journal_type=#{journal&.journal_type_id}, bank_type=#{JournalType::BANK_TYPE_ID}"
+      return
+    end
+    
+    current_count = subentries.count
+    Rails.logger.info "** PODPOZYCJE: Aktualna liczba podpozycji: #{current_count}"
+    
+    # Nie rób nic, jeśli liczba podpozycji się nie zmieniła
+    if new_count == current_count
+      Rails.logger.info "** PODPOZYCJE: Liczba nie zmieniła się, pomijam"
+      return
+    end
+    
+    # Aktualizacja liczby podpozycji w głównym wpisie
+    Rails.logger.info "** PODPOZYCJE: Aktualizuję liczbę podpozycji na #{new_count + 1}"
+    update_column(:subentries_count, new_count + 1) # +1 ponieważ główny wpis liczy się jako pierwsza podpozycja ("a")
+    
+    if new_count > current_count
+      # Dodawanie nowych podpozycji
+      Rails.logger.info "** PODPOZYCJE: Dodaję #{new_count - current_count} nowych podpozycji"
+      ('b'.ord + current_count..'b'.ord + new_count - 1).each_with_index do |char_code, index|
+        position = char_code.chr
+        Rails.logger.info "** PODPOZYCJE: Tworzę podpozycję #{position}"
+        create_subentry(position, index + current_count + 1)
+      end
+    elsif new_count < current_count
+      # Usuwanie nadmiarowych podpozycji (od końca)
+      Rails.logger.info "** PODPOZYCJE: Usuwam #{current_count - new_count} nadmiarowych podpozycji"
+      subentries_to_remove = subentries.order(subentry_position: :desc).limit(current_count - new_count)
+      subentries_to_remove.destroy_all
+    end
+    
+    Rails.logger.info "** PODPOZYCJE: Zakończono aktualizację podpozycji"
+  end
+  
+  # Tworzenie pojedynczej podpozycji
+  def create_subentry(position, order_index)
+    Rails.logger.info "** PODPOZYCJE: Rozpoczynam tworzenie podpozycji #{position}"
+    
+    # Kopiowanie wartości z głównego wpisu
+    subentry = self.dup
+    
+    # Ustawienie pól dotyczących podpozycji
+    subentry.is_subentry = true
+    subentry.parent_entry_id = self.id
+    subentry.subentry_position = position
+    subentry.subentries_count = 1  # Podpozycje zawsze mają wartość 1
+    
+    # Ustawienie odpowiednich wartości domyślnych dla podpozycji
+    subentry.name = "Nowa podpozycja do uzupełnienia"
+    subentry.document_date = nil   # Pusta data dokumentu
+    subentry.document_number = ""  # Pusty numer dokumentu
+    
+    # WAŻNE: Musimy skopiować items PRZED zapisaniem podpozycji,
+    # ponieważ walidacja wymaga obecności items
+    Rails.logger.info "** PODPOZYCJE: Tworzę items dla podpozycji - kwota 0,01 tylko dla pierwszej kategorii"
+    
+    # Flaga do śledzenia czy już przypisaliśmy kwotę 0,01 do jakiejś kategorii
+    first_category_found = false
+    
+    # Tworzymy items z kwotą 0,01 tylko dla pierwszej kategorii, reszta 0,00
+    self.items.each do |item|
+      # Określ kwotę na podstawie tego, czy to pierwsza kategoria
+      amount_value = 0.00
+      amount_one_percent_value = 0.00
+      
+      # Jeśli to pierwsza kategoria, przypisujemy kwotę 0,01
+      if !first_category_found
+        amount_value = 0.01
+        # Dla kategorii 1% ustawiamy również amount_one_percent na 0,01
+        amount_one_percent_value = item.category.is_one_percent ? 0.01 : 0.00
+        first_category_found = true
+      end
+        
+      # Użyj build zamiast create, aby utworzyć obiekt ale nie zapisywać go jeszcze
+      new_item = subentry.items.build(
+        amount: amount_value,
+        amount_one_percent: amount_one_percent_value,
+        category_id: item.category_id
+      )
+      
+      # Dla podpozycji nie kopiujemy powiązań z dotacjami (item_grants)
+      # Jeśli będzie potrzeba dodania dotacji do podpozycji, użytkownik może to zrobić ręcznie
+    end
+    
+    # Zapisanie podpozycji razem z wszystkimi powiązanymi items
+    if subentry.save
+      Rails.logger.info "** PODPOZYCJE: Utworzono podpozycję #{position} (ID: #{subentry.id}) z #{subentry.items.count} items, kwota 0,01 tylko w pierwszej kategorii"
+      return subentry
+    else
+      Rails.logger.error "** PODPOZYCJE: Błąd podczas tworzenia podpozycji #{position}: #{subentry.errors.full_messages.join(', ')}"
+      return nil
+    end
+  end
+  
+  # Ta metoda nie jest już potrzebna, ponieważ items są tworzone przed zapisem
+  # Metoda ta pozostaje, ale nie będzie używana
+  def copy_items_to_subentry(subentry)
+    Rails.logger.info "** PODPOZYCJE: Metoda copy_items_to_subentry nie jest już używana"
   end
 end
