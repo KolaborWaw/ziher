@@ -23,15 +23,15 @@
             <div class="col-md-3">
               <%= f.label :date, "Data wyciągu" %> <span class="text-danger">*</span>
               <% if @is_auto_import_bank && !current_user.is_superadmin || @entry.is_subentry %>
-                <%= f.text_field :date, class: "form-control", required: true, disabled: true %>
+                <%= f.text_field :date, class: "form-control", required: true, disabled: true, autocomplete: "off" %>
                 <%= f.hidden_field :date %>
               <% else %>
-                <%= f.text_field :date, class: "form-control", required: true %>
+                <%= f.text_field :date, class: "form-control", required: true, autocomplete: "off" %>
               <% end %>
             </div>
             <div class="col-md-3">
               <%= f.label :document_date, "Data dokumentu" %>
-              <%= f.text_field :document_date, class: "form-control" %>
+              <%= f.text_field :document_date, class: "form-control", autocomplete: "off" %>
             </div>
             <div class="col-md-3">
               <%= f.label :Numer_wyciągu %> <span class="text-danger">*</span>
@@ -49,7 +49,7 @@
           <% else %>
             <div class="col-md-3">
               <%= f.label :date, "Data" %> <span class="text-danger">*</span>
-              <%= f.text_field :date, class: "form-control", required: true %>
+              <%= f.text_field :date, class: "form-control", required: true, autocomplete: "off" %>
             </div>
             <div class="col-md-3 col-md-offset-3">
               <%= f.label :Numer_dokumentu %> <span class="text-danger">*</span>
@@ -80,7 +80,6 @@
                   <option value="<%= i %>" <%= 'selected' if @entry.subentries_count == i || (i == 1 && @entry.id.nil?) %>><%= i %></option>
                 <% end %>
               </select>
-              <input type="hidden" name="has_subentries_selector" value="true">
               <div class="help-block">
                 <small class="text-muted">Liczba podpozycji (łącznie z głównym wpisem). Dla wartości większych niż 1, wpisy będą pokazywane jako 2a, 2b, 2c itd.</small>
               </div>

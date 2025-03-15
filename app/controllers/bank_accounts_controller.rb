@@ -338,7 +338,7 @@ class BankAccountsController < ApplicationController
         # Create entry
         entry = bank_journal.entries.build(
           date: date,
-          document_date: date, # Ustaw datę dokumentu taką samą jak data wyciągu
+          document_date: nil, # Ustawiamy pustą datę dokumentu
           document_number: transaction_id,
           statement_number: statement_number,
           name: description,

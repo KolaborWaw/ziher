@@ -186,7 +186,7 @@
             <small><%= entry.date %></small>
           </td>
           <td style="white-space: nowrap">
-            <small><%= entry.document_date %></small>
+            <small><%= entry.document_date.present? ? entry.document_date : "" %></small>
           </td>
           <% else %>
           <td style="white-space: nowrap">

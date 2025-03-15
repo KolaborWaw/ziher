@@ -185,7 +185,7 @@
         <td>
           <small>
             <% if @journal.journal_type_id == JournalType::BANK_TYPE_ID %>
-              <% if entry.document_date && entry.document_date != entry.date %>
+              <% if entry.document_date.present? %>
                 <span title="Data wyciągu"><%= entry.date %></span>
                 <hr style='margin: 2px 0;'/>
                 <span title="Data dokumentu"><%= entry.document_date %></span>

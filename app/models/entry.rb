@@ -49,9 +49,9 @@ class Entry < ApplicationRecord
     self[:statement_number] = value
   end
 
-  # Data dokumentu - jeśli nie jest określona, użyj daty wyciągu
+  # Data dokumentu - bez automatycznego fallbacku do daty wyciągu
   def document_date
-    self[:document_date] || self[:date]
+    self[:document_date]
   end
 
   def must_have_statement_number_for_bank_journal
@@ -252,8 +252,11 @@ class Entry < ApplicationRecord
     return position.to_s unless can_have_subentries? || is_subentry
     
     if is_subentry
+      Rails.logger.info "** PODPOZYCJE: Generuję etykietę dla podpozycji id=#{id}, parent_id=#{parent_entry_id}, pozycja=#{position}#{subentry_position}"
       "#{position}#{subentry_position}"
     else
+      # Główne wpisy z podpozycjami mają oznaczenie "2a"
+      Rails.logger.info "** PODPOZYCJE: Generuję etykietę dla głównego wpisu id=#{id}, pozycja=#{position}a"
       "#{position}a"
     end
   end
@@ -307,9 +310,12 @@ class Entry < ApplicationRecord
     
     # Ustawienie pól dotyczących podpozycji
     subentry.is_subentry = true
-    subentry.parent_entry_id = self.id
+    subentry.parent_entry_id = self.id # Upewniamy się, że parent_entry_id jest poprawnie ustawiony
     subentry.subentry_position = position
     subentry.subentries_count = 1  # Podpozycje zawsze mają wartość 1
+    
+    # Zapisujemy informację w logach, aby pomóc w debugowaniu
+    Rails.logger.info "** PODPOZYCJE: Tworzę podpozycję dla głównego wpisu id=#{self.id}, pozycja=#{position}"
     
     # Ustawienie odpowiednich wartości domyślnych dla podpozycji
     subentry.name = "Nowa podpozycja do uzupełnienia"
@@ -343,9 +349,6 @@ class Entry < ApplicationRecord
         amount_one_percent: amount_one_percent_value,
         category_id: item.category_id
       )
-      
-      # Dla podpozycji nie kopiujemy powiązań z dotacjami (item_grants)
-      # Jeśli będzie potrzeba dodania dotacji do podpozycji, użytkownik może to zrobić ręcznie
     end
     
     # Zapisanie podpozycji razem z wszystkimi powiązanymi items
@@ -356,11 +359,5 @@ class Entry < ApplicationRecord
       Rails.logger.error "** PODPOZYCJE: Błąd podczas tworzenia podpozycji #{position}: #{subentry.errors.full_messages.join(', ')}"
       return nil
     end
-  end
-  
-  # Ta metoda nie jest już potrzebna, ponieważ items są tworzone przed zapisem
-  # Metoda ta pozostaje, ale nie będzie używana
-  def copy_items_to_subentry(subentry)
-    Rails.logger.info "** PODPOZYCJE: Metoda copy_items_to_subentry nie jest już używana"
   end
 end

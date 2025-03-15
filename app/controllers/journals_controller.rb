@@ -49,8 +49,9 @@ class JournalsController < ApplicationController
     # Sortowanie wpisów z uwzględnieniem podpozycji
     all_entries = if @journal.journal_type_id == JournalType::BANK_TYPE_ID
       # Dla księgi bankowej: sortowanie po dacie, a następnie najpierw wpisy główne, a potem podpozycje
+      # Dodajemy sortowanie po parent_entry_id, aby upewnić się, że podpozycje są zawsze przypisane do właściwego wpisu głównego
       @journal.entries.includes({ items: [:category, :grants, { item_grants: :grant }] })
-              .order('date', 'is_subentry', 'subentry_position', 'id')
+              .order('date ASC', 'CASE WHEN is_subentry THEN parent_entry_id ELSE id END ASC', 'is_subentry ASC', 'subentry_position ASC', 'id ASC')
     else
       # Dla pozostałych ksiąg: standardowe sortowanie
       @journal.entries.includes({ items: [:category, :grants, { item_grants: :grant }] })

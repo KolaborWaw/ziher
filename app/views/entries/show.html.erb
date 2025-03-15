@@ -12,7 +12,7 @@
             </strong>
             <%= @entry.date %>
         </div>
-        <% if @entry.journal.journal_type_id == JournalType::BANK_TYPE_ID && @entry.document_date && @entry.document_date != @entry.date %>
+        <% if @entry.journal.journal_type_id == JournalType::BANK_TYPE_ID && @entry.document_date.present? %>
         <div class="col-md-3">
             <strong>Data dokumentu:</strong>
             <%= @entry.document_date %>
@@ -22,7 +22,7 @@
             <strong>Numer wyciągu:</strong>
             <%= @entry.statement_number %>
         </div>
-        <div class="col-md-3 <%= 'col-md-offset-3' if @entry.journal.journal_type_id != JournalType::BANK_TYPE_ID || @entry.document_date.nil? || @entry.document_date == @entry.date %>">
+        <div class="col-md-3 <%= 'col-md-offset-3' if @entry.journal.journal_type_id != JournalType::BANK_TYPE_ID || @entry.document_date.nil? %>">
             <strong>Numer dokumentu:</strong>
             <%= @entry.document_number %>
         </div>
