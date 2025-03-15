@@ -68,8 +68,8 @@
             <tr>
               <td><%= unit.code %></td>
               <td><%= unit.name %></td>
-              <td><%= unit.bank_account.present? ? unit.bank_account : "-" %></td>
-              <td><%= render_boolean_icon_centered(unit.auto_bank_import) %></td>
+              <td><%= unit.bank_account.present? ? format_bank_account(unit.bank_account) : "-" %></td>
+              <td><%= unit.auto_bank_import ? "TAK" : "NIE" %></td>
               <td>
                 <% if bank_journal %>
                   <% if bank_journal.is_open %>

@@ -31,7 +31,7 @@
         <tr>
           <td><%= unit.code %></td>
           <td><%= unit.name %></td>
-          <td><%= unit.bank_account.present? ? unit.bank_account : "-" %></td>
+          <td><%= unit.bank_account.present? ? format_bank_account(unit.bank_account) : "-" %></td>
           <td>
             <%= link_to toggle_auto_import_bank_accounts_path(unit_id: unit.id), 
                 method: :post,

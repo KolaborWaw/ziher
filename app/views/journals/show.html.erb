@@ -5,6 +5,13 @@
         <strong>Uwaga!</strong> Ta książka bankowa jest oznaczona jako "Auto import". Tylko administrator systemu może dodawać i usuwać wpisy.
       </div>
     <% end %>
+    
+    <% if @journal.journal_type_id == JournalType::BANK_TYPE_ID && @journal.unit.bank_account.present? %>
+      <div class="well well-sm">
+        <strong>Numer konta bankowego:</strong> <%= format_bank_account(@journal.unit.bank_account) %>
+      </div>
+    <% end %>
+    
     <% if @journal.is_not_blocked() %>
       <% if @journal.journal_type_id == JournalType::BANK_TYPE_ID && @journal.unit.auto_bank_import && !current_user.is_superadmin %>
         <div class="btn btn-sm btn-default" disabled><span class="glyphicon glyphicon-plus"></span>&nbsp;&nbsp;Nowy wpływ</div>

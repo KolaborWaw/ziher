@@ -1,96 +1,21 @@
 module ApplicationHelper
-  def menu_active?(page_name)
-    case page_name
+  def menu_active?(section=nil)
+    active = false
+    case section
     when :journal_finance
-      "active" if (
-        request.path_parameters[:controller].to_s == "journals" &&
-        Journal.find_by_id(params[:id]) != nil &&
-        Journal.find_by_id(params[:id]).journal_type_id == 1
-      ) || (
-        current_page?(new_entry_path) &&
-        Journal.find_by_id(params[:journal_id]) != nil &&
-        Journal.find_by_id(params[:journal_id]).journal_type_id == 1
-      )
-      # TODO: wywalić magic number
-
+      active = controller.controller_name == 'journals' && controller.action_name == 'default' && params[:journal_type_id] == JournalType::FINANCE_TYPE_ID.to_s
     when :journal_bank
-      "active" if (
-        request.path_parameters[:controller].to_s == "journals" &&
-        Journal.find_by_id(params[:id]) != nil &&
-        Journal.find_by_id(params[:id]).journal_type_id == 2
-      ) || (
-        current_page?(new_entry_path) &&
-        Journal.find_by_id(params[:journal_id]) != nil &&
-        Journal.find_by_id(params[:journal_id]).journal_type_id == 2
-      )
-      # TODO: wywalić magic number
-
-    when :inventory
-      "active" if
-        current_page?(inventory_entries_path) ||
-        current_page?(new_inventory_entry_path)
-
+      active = controller.controller_name == 'journals' && controller.action_name == 'default' && params[:journal_type_id] == JournalType::BANK_TYPE_ID.to_s
+    when :journal_inventory
+      active = controller.controller_name == 'journals' && controller.action_name == 'default' && params[:journal_type_id] == JournalType::INVENTORY_TYPE_ID.to_s
     when :units
-      "active" if current_page?(units_path)
-
-    when :groups
-      "active" if current_page?(groups_path)
-
-    when :categories
-      "active" if current_page?(categories_path)
-
-    when :journals
-      "active" if current_page?(journals_path)
-
-    when :journal_types
-      "active" if current_page?(journal_types_path)
-
-    when :users
-      "active" if current_page?(users_path)
-
-    when :inventory_sources
-      "active" if current_page?(inventory_sources_path)
-
-    when :audits
-      "active" if current_page?(audits_index_path)
-
-    when :finance_report
-      "active" if current_page?(finance_report_path)
-
-    when :finance_one_percent_report
-      "active" if current_page?(finance_one_percent_report_path)
-
-    when :finance_grants_report
-      "active" if current_page?(finance_grants_report_path)
-
-    when :all_finance_report
-      "active" if current_page?(all_finance_report_path)
-
-    when :all_finance_one_percent_report
-      "active" if current_page?(all_finance_one_percent_report_path)
-
-    when :all_finance_grants_report
-      "active" if current_page?(all_finance_grants_report_path)
-
-    when :reports_dropdown
-      "active" if
-          current_page?(finance_report_path) or
-          current_page?(finance_one_percent_report_path) or
-          current_page?(all_finance_report_path) or
-          current_page?(all_finance_one_percent_report_path)
-
-    when :administration_dropdown
-      "active" if
-        current_page?(units_path) or
-        current_page?(groups_path) or
-        current_page?(categories_path) or
-        current_page?(grants_path) or
-        current_page?(journals_path) or
-        current_page?(journal_types_path) or
-        current_page?(users_path) or
-        current_page?(inventory_sources_path) or
-        current_page?(audits_index_path)
+      active = controller.controller_name == 'units' && controller.action_name == 'index'
+    when :bank_accounts
+      active = controller.controller_name == 'bank_accounts'
+    else
+      active = false
     end
+    active ? 'active' : ''
   end
 
   def render_boolean_icon(value)
@@ -104,5 +29,25 @@ module ApplicationHelper
   end
 
   include Pagy::Frontend
+
+  # Formatuje numer konta bankowego w standardowym formacie z odstępami
+  def format_bank_account(account_number)
+    return "" if account_number.blank?
+    
+    # Usuń wszystkie istniejące spacje i inne znaki specjalne
+    clean_number = account_number.to_s.gsub(/\s+/, "").gsub(/[^0-9]/, "")
+    
+    # Formatuj numer konta: pierwsze 2 cyfry oddzielnie, a potem grupy po 4 cyfry
+    if clean_number.length >= 2
+      first_part = clean_number[0..1]
+      rest = clean_number[2..-1]
+      rest_formatted = rest.scan(/.{1,4}/).join(" ")
+      formatted = "#{first_part} #{rest_formatted}"
+    else
+      formatted = clean_number
+    end
+    
+    return formatted
+  end
 
 end

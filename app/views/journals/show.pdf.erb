@@ -52,6 +52,9 @@
           <span class="text-uppercase"><%= @journal.journal_type %> na <%= @journal.year %> rok dla <%= @journal.unit.full_name %>
           </span>
           <br/>
+          <% if @journal.journal_type_id == JournalType::BANK_TYPE_ID && @journal.unit.bank_account.present? %>
+            <span>Numer konta bankowego: <%= format_bank_account(@journal.unit.bank_account) %></span>
+          <% end %>
         </b>
         </td>
       </tr>

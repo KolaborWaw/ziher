@@ -20,6 +20,7 @@ class ReportsController < ApplicationController
     end
 
     session[:current_unit_id] = @selected_unit_id.to_i
+    @selected_unit = Unit.find(@selected_unit_id)
 
     set_report_global_variables(@selected_unit_id)
 
@@ -76,7 +77,6 @@ class ReportsController < ApplicationController
   end
 
   def finance_grants
-
     @user_units = Unit.find_by_user(current_user)
 
     @selected_unit_id = params[:unit_id] || session[:current_unit_id]
@@ -89,8 +89,18 @@ class ReportsController < ApplicationController
     session[:current_unit_id] = @selected_unit_id.to_i
 
     set_report_global_variables(@selected_unit_id)
+    
+    # Dodajemy inicjalizację @years nawet gdy nie ma grantów
+    @years = Journal.find_all_years
 
     grant = get_grant
+    if grant.nil?
+      @no_grants = true
+      @report_header = 'Raporty > Sprawozdanie finansowe dla dotacji'
+      @report_link = finance_grants_report_path
+      render 'finance'
+      return
+    end
 
     @report_header = 'Raporty > Sprawozdanie finansowe dla dotacji ' + grant.name
     @report_link = finance_grants_report_path
@@ -123,6 +133,22 @@ class ReportsController < ApplicationController
 
     @report_header = 'Raporty > Całościowe sprawozdanie finansowe'
     @report_link = all_finance_report_path
+
+    @selected_year = params[:year] || Date.today.year
+    @selected_year = @selected_year.to_i
+
+    @selected_group_id = params[:group_id] || 0
+    @selected_group_id = @selected_group_id.to_i
+
+    @selected_unit_id = params[:unit_id] || 0
+    @selected_unit_id = @selected_unit_id.to_i
+    
+    # Użytkownik mógł wybrać konkretną jednostkę do raportu
+    if @selected_unit_id > 0
+      @selected_unit = Unit.find(@selected_unit_id)
+    end
+
+    @units = get_units_for_group(@selected_group_id, true)
 
     set_report_global_variables
 
@@ -220,8 +246,22 @@ class ReportsController < ApplicationController
     end
 
     set_report_global_variables
+    
+    # Dodajemy inicjalizację @years nawet gdy nie ma grantów
+    @years = Journal.find_all_years
+    
+    # Inicjalizacja zmiennych dla widoku all_finance
+    @open_old_journals = Journal.find_old_open(@selected_year)
+    @open_current_journals = Journal.find_open_by_year(@selected_year)
 
     grant = get_grant
+    if grant.nil?
+      @no_grants = true
+      @report_header = 'Raporty > Całościowe sprawozdanie finansowe dla dotacji'
+      @report_link = all_finance_grants_report_path
+      render 'all_finance'
+      return
+    end
 
     @report_header = 'Raporty > Całościowe sprawozdanie finansowe dla dotacji ' + grant.name
     @report_link = all_finance_grants_report_path
@@ -465,12 +505,35 @@ class ReportsController < ApplicationController
     if grant.blank?
       grant = @grants.first
 
-      redirect_to root_path if grant.nil?
+      if grant.nil?
+        # Jeśli nie ma żadnych grantów, ustawiam komunikat flash ale nie przekierowuję,
+        # przekierowanie będzie obsługiwane w metodach wywołujących
+        flash[:alert] = "Nie znaleziono żadnych dotacji za wybrany rok. Utwórz dotację, aby móc wygenerować raport."
+        return nil
+      end
     end
 
     session[:current_grant_id] = grant.id
     @selected_grant_id = grant.id
 
     return grant
+  end
+
+  # Pobiera jednostki należące do grupy
+  def get_units_for_group(group_id, include_active_only = false)
+    if group_id.to_i > 0
+      # Pobierz jednostki dla konkretnej grupy
+      units = Group.find(group_id).units
+    else
+      # Pobierz wszystkie jednostki
+      units = Unit.all
+    end
+    
+    # Jeśli mają być tylko aktywne jednostki
+    if include_active_only
+      units = units.where(is_active: true)
+    end
+    
+    units
   end
 end
