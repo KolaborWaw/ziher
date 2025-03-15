@@ -64,65 +64,62 @@
           </div>
         </div>
         
-        <% if @journal.journal_type_id == JournalType::BANK_TYPE_ID %>
         <div class="row top-buffer-20">
-          <div class="col-md-6">
+          <% if @entry.id.present? && params[:type_changed].blank? %>
+            <%# Pokaż opcję zmiany typu %>
+            <div class="col-md-6">
+              <label>Typ wpisu:</label>
+              <div class="form-inline">
+                <div class="radio" style="margin-right: 15px; display: inline-block;">
+                  <%= f.radio_button :is_expense, false, id: "entry_type_income", onclick: "handleEntryTypeChange(false)" %>
+                  <%= f.label :is_expense, "Wpływ", value: false, for: "entry_type_income", style: "margin-right: 15px;" %>
+                </div>
+                <div class="radio" style="display: inline-block;">
+                  <%= f.radio_button :is_expense, true, id: "entry_type_expense", onclick: "handleEntryTypeChange(true)" %>
+                  <%= f.label :is_expense, "Wydatek", value: true, for: "entry_type_expense" %>
+                </div>
+              </div>
+              <small class="text-muted">Zmiana typu wymaga zapisania zmian.</small>
+            </div>
+          <% elsif params[:type_changed].present? %>
+            <%# Po zmianie typu nie można go ponownie zmienić przed zapisaniem %>
+            <div class="col-md-12">
+              <label>Typ wpisu:</label>
+              <div class="alert alert-warning" role="alert">
+                Typ wpisu został zmieniony na <strong><%= @entry.is_expense ? 'wydatek' : 'wpływ' %></strong>. 
+                Aby zapisać zmiany, kliknij przycisk "Zapisz" poniżej.
+              </div>
+              <%= f.hidden_field :is_expense, value: @entry.is_expense %>
+            </div>
+          <% else %>
+            <%# Dla nowego wpisu, ukryj opcję wyboru typu %>
+            <%= f.hidden_field :is_expense, value: @entry.is_expense %>
+          <% end %>
+          
+          <% if @journal.journal_type_id == JournalType::BANK_TYPE_ID %>
             <% if @entry.is_subentry %>
               <!-- Dla podpozycji pokazujemy tylko informację -->
-              <label>Liczba podpozycji:</label>
-              <p class="form-control-static">To jest podpozycja wpisu głównego</p>
-              <input type="hidden" name="subentries_count" value="1">
+              <div class="col-md-6">
+                <label>Liczba podpozycji:</label>
+                <p class="form-control-static">To jest podpozycja wpisu głównego</p>
+                <input type="hidden" name="subentries_count" value="1">
+              </div>
             <% else %>
               <!-- Dla głównych wpisów w księdze bankowej pokazujemy selektor liczby podpozycji -->
-              <label for="subentries_count">Liczba podpozycji:</label>
-              <select name="subentries_count" id="subentries_count" class="form-control">
-                <% (1..9).each do |i| %>
-                  <option value="<%= i %>" <%= 'selected' if @entry.subentries_count == i || (i == 1 && @entry.id.nil?) %>><%= i %></option>
-                <% end %>
-              </select>
-              <div class="help-block">
-                <small class="text-muted">Liczba podpozycji (łącznie z głównym wpisem). Dla wartości większych niż 1, wpisy będą pokazywane jako 2a, 2b, 2c itd.</small>
+              <div class="col-md-6">
+                <label for="subentries_count">Liczba podpozycji:</label>
+                <div class="form-inline">
+                  <select name="subentries_count" id="subentries_count" class="form-control" style="width: auto;">
+                    <% (1..9).each do |i| %>
+                      <option value="<%= i %>" <%= 'selected' if @entry.subentries_count == i || (i == 1 && @entry.id.nil?) %>><%= i %></option>
+                    <% end %>
+                  </select>
+                  <small class="text-muted" style="margin-left: 10px;">Wpisy będą pokazywane jako 2a, 2b, 2c itd.</small>
+                </div>
               </div>
             <% end %>
-          </div>
+          <% end %>
         </div>
-        <% end %>
-        
-        <% if @entry.id.present? && params[:type_changed].blank? %>
-        <%# Pokaż opcję zmiany typu tylko podczas edycji istniejącego wpisu (nie przy dodawaniu) %>
-        <div class="row top-buffer-20">
-          <div class="col-md-12">
-            <label>Typ wpisu:</label>
-            <div class="radio">
-              <%= f.radio_button :is_expense, false, id: "entry_type_income", onclick: "handleEntryTypeChange(false)" %>
-              <%= f.label :is_expense, "Wpływ", value: false, for: "entry_type_income" %>
-            </div>
-            <div class="radio">
-              <%= f.radio_button :is_expense, true, id: "entry_type_expense", onclick: "handleEntryTypeChange(true)" %>
-              <%= f.label :is_expense, "Wydatek", value: true, for: "entry_type_expense" %>
-            </div>
-            <div class="help-block">
-              <small class="text-muted">Zmiana typu wpisu spowoduje przeniesienie wszystkich wartości do pierwszej kategorii nowego typu. 
-              Po zmianie typu wpisu należy zapisać zmiany, aby móc wprowadzić inne modyfikacje.</small>
-            </div>
-          </div>
-        </div>
-        <% elsif params[:type_changed].present? %>
-        <%# Po zmianie typu nie można go ponownie zmienić przed zapisaniem %>
-        <div class="row top-buffer-20">
-          <div class="col-md-12">
-            <label>Typ wpisu:</label>
-            <div class="alert alert-warning" role="alert">
-              Typ wpisu został zmieniony na <strong><%= @entry.is_expense ? 'wydatek' : 'wpływ' %></strong>. 
-              Aby zapisać zmiany, kliknij przycisk "Zapisz" poniżej. Aby zmienić ponownie typ wpisu, musisz najpierw zapisać bieżące zmiany.
-            </div>
-            <%= f.hidden_field :is_expense, value: @entry.is_expense %>
-          </div>
-        </div>
-        <% else %>
-        <%# Dla nowego wpisu, ukryj opcję wyboru typu %>
-        <%= f.hidden_field :is_expense, value: @entry.is_expense %>
-        <% end %>
       </div>
 
     </div>
