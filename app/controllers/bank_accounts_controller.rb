@@ -71,7 +71,10 @@ class BankAccountsController < ApplicationController
     error_count = 0
     error_messages = []
 
-    params[:elixir_files].each do |file|
+    # Sortuj pliki po nazwie (ELIXIR_NUMERKONTA_YYYYMMDD)
+    sorted_files = params[:elixir_files].sort_by { |file| file.original_filename }
+
+    sorted_files.each do |file|
       begin
         # Próba różnych kodowań
         raw_data = file.read
@@ -230,6 +233,9 @@ class BankAccountsController < ApplicationController
       return { success_count: success_count, error_count: error_count, error_messages: error_messages }
     end
     
+    # Zbierz wszystkie wpisy do przetworzenia
+    entries_to_import = []
+    
     line_number = 0
     elixir_data.each_line do |line|
       line_number += 1
@@ -253,12 +259,20 @@ class BankAccountsController < ApplicationController
         transaction_type = columns[0].strip
         date_str = columns[1].strip
         
-        # Parsuj numer wyciągu z kolumny 4
-        statement_number = columns[3].to_s.strip
+        # Parsuj numer wyciągu z kolumny 15 (indeks 14)
+        statement_number = columns[14].to_s.strip if columns.length > 14
         
-        # Jeśli numer wyciągu jest pusty, ustaw domyślną wartość "PUSTO"
+        # Jeśli numer wyciągu jest pusty, ustaw format MM/YYYY
         if statement_number.blank?
-          statement_number = "PUSTO"
+          begin
+            if date_str =~ /^(\d{4})(\d{2})(\d{2})$/
+              statement_number = "#{$2}/#{$1}" # MM/YYYY
+            else
+              statement_number = Date.today.strftime('%m/%Y')
+            end
+          rescue
+            statement_number = Date.today.strftime('%m/%Y')
+          end
         end
         
         # Parsuj kwotę - obsłuż różne formaty
@@ -324,6 +338,7 @@ class BankAccountsController < ApplicationController
         # Create entry
         entry = bank_journal.entries.build(
           date: date,
+          document_date: date, # Ustaw datę dokumentu taką samą jak data wyciągu
           document_number: transaction_id,
           statement_number: statement_number,
           name: description,
@@ -337,16 +352,25 @@ class BankAccountsController < ApplicationController
           category_id: category.id
         )
         
-        if entry.save
-          success_count += 1
-        else
-          error_count += 1
-          error_messages << "Linia #{line_number}: Błąd zapisywania transakcji: #{entry.errors.full_messages.join(', ')}"
-        end
+        # Dodaj wpis do listy do importu
+        entries_to_import << entry
         
       rescue => e
         error_count += 1
         error_messages << "Linia #{line_number}: Błąd przetwarzania linii: #{e.message}"
+      end
+    end
+    
+    # Sortuj wpisy od najmłodszej daty do najstarszej
+    entries_to_import.sort_by! { |entry| [-entry.date.to_time.to_i, entries_to_import.index(entry)] }
+    
+    # Zapisz wszystkie wpisy
+    entries_to_import.each do |entry|
+      if entry.save
+        success_count += 1
+      else
+        error_count += 1
+        error_messages << "Błąd zapisywania transakcji: #{entry.errors.full_messages.join(', ')}"
       end
     end
     

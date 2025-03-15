@@ -174,7 +174,21 @@
             <% end %>
           </small>
         </td>
-        <td><small><%= entry.date %></small></td>
+        <td>
+          <small>
+            <% if @journal.journal_type_id == JournalType::BANK_TYPE_ID %>
+              <% if entry.document_date && entry.document_date != entry.date %>
+                <span title="Data wyciągu"><%= entry.date %></span>
+                <hr style='margin: 2px 0;'/>
+                <span title="Data dokumentu"><%= entry.document_date %></span>
+              <% else %>
+                <%= entry.date %>
+              <% end %>
+            <% else %>
+              <%= entry.date %>
+            <% end %>
+          </small>
+        </td>
         <td>
           <small>
             <span title='<%= I18n.t('helpers.label.journal.name_tooltip') %>'><%= entry.name %></span>

@@ -19,25 +19,33 @@
     <div class="col-md-6">
       <div class="well">
         <div class="row">
-          <div class="col-md-3">
-            <%= f.label :data %> <span class="text-danger">*</span>
-            <% if @is_auto_import_bank && !current_user.is_superadmin %>
-              <%= f.text_field :date, class: "form-control", required: true, disabled: true %>
-              <%= f.hidden_field :date %>
-            <% else %>
-              <%= f.text_field :date, class: "form-control", required: true %>
-            <% end %>
-          </div>
           <% if @journal.journal_type_id == JournalType::BANK_TYPE_ID %>
+            <div class="col-md-3">
+              <%= f.label :date, "Data wyciągu" %> <span class="text-danger">*</span>
+              <% if @is_auto_import_bank && !current_user.is_superadmin %>
+                <%= f.text_field :date, class: "form-control", required: true, disabled: true %>
+                <%= f.hidden_field :date %>
+              <% else %>
+                <%= f.text_field :date, class: "form-control", required: true %>
+              <% end %>
+            </div>
+            <div class="col-md-3">
+              <%= f.label :document_date, "Data dokumentu" %>
+              <%= f.text_field :document_date, class: "form-control" %>
+            </div>
             <div class="col-md-3">
               <%= f.label :Numer_wyciągu %> <span class="text-danger">*</span>
               <%= f.text_field :statement_number, class: "form-control", required: true %>
             </div>
-            <div class="col-md-3 col-md-offset-3">
+            <div class="col-md-3">
               <%= f.label :Numer_dokumentu %>
               <%= f.text_field :document_number, class: "form-control" %>
             </div>
           <% else %>
+            <div class="col-md-3">
+              <%= f.label :date, "Data" %> <span class="text-danger">*</span>
+              <%= f.text_field :date, class: "form-control", required: true %>
+            </div>
             <div class="col-md-3 col-md-offset-3">
               <%= f.label :Numer_dokumentu %> <span class="text-danger">*</span>
               <%= f.text_field :document_number, class: "form-control", required: true %>
@@ -206,6 +214,7 @@
       if (isBankJournal) {
         formData.statementNumber = document.getElementById('entry_statement_number').value;
         formData.documentNumber = document.getElementById('entry_document_number').value;
+        formData.documentDate = document.getElementById('entry_document_date').value;
       } else {
         formData.documentNumber = document.getElementById('entry_document_number').value;
       }
@@ -259,7 +268,7 @@
     try {
       // Inicjalizacja kalendarza dla pola daty
       if (typeof $.fn.datepicker !== 'undefined') {
-        $('#entry_date').datepicker({
+        $('#entry_date, #entry_document_date').datepicker({
           format: 'yyyy-mm-dd',
           autoclose: true,
           todayHighlight: true,
@@ -318,6 +327,10 @@
           
           if (savedData.documentNumber) {
             document.getElementById('entry_document_number').value = savedData.documentNumber;
+          }
+          
+          if (savedData.documentDate && isBankJournal) {
+            document.getElementById('entry_document_date').value = savedData.documentDate;
           }
           
           if (savedData.name) document.getElementById('entry_name').value = savedData.name;

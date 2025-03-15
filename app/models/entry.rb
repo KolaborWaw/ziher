@@ -45,6 +45,11 @@ class Entry < ApplicationRecord
     self[:statement_number] = value
   end
 
+  # Data dokumentu - jeśli nie jest określona, użyj daty wyciągu
+  def document_date
+    self[:document_date] || self[:date]
+  end
+
   def must_have_statement_number_for_bank_journal
     if journal && journal.journal_type_id == JournalType::BANK_TYPE_ID
       if statement_number.blank?

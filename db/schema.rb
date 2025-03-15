@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 2025_03_14_225318) do
+ActiveRecord::Schema.define(version: 2025_03_14_235355) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -61,7 +61,14 @@ ActiveRecord::Schema.define(version: 2025_03_14_225318) do
     t.boolean "is_expense"
     t.integer "linked_entry_id"
     t.string "statement_number"
+    t.boolean "is_parent", default: false
+    t.integer "parent_id"
+    t.integer "subentry_index"
+    t.integer "subentry_count", default: 1
+    t.bigint "parent_entry_id"
+    t.date "document_date"
     t.index ["journal_id"], name: "index_entries_on_journal_id"
+    t.index ["parent_entry_id"], name: "index_entries_on_parent_entry_id"
   end
 
   create_table "grants", force: :cascade do |t|
@@ -243,4 +250,5 @@ ActiveRecord::Schema.define(version: 2025_03_14_225318) do
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
   end
 
+  add_foreign_key "entries", "entries", column: "parent_entry_id"
 end
