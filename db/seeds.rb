@@ -429,7 +429,7 @@ wigryk2011b = Journal.create!(year: 2011, journal_type: bank, unit: wigryk, is_o
 darowizna = Entry.new(date: '2012-01-01', name: 'entry 1: darowizna', document_number: 'ey1', journal: dukt2012f, is_expense: false)
 akcja_i_darowizna = Entry.new(date: '2012-01-01', name: 'entry 2: akcja, darowizna', document_number: 'ntr2', journal: dukt2012f, is_expense: false)
 wyposazenie = Entry.new(date: '2012-01-01', name: 'entry 3: wyposazenie', document_number: 'fv4', journal: dukt2012f, is_expense: true)
-transport = Entry.new(date: '2011-01-01', name: 'entry 4: transport', document_number: 'trnsprtdrwn', journal: wigryk2011b, is_expense: false)
+transport = Entry.new(date: '2011-01-01', name: 'entry 4: transport', document_number: 'trnsprtdrwn', journal: wigryk2011b, is_expense: true)
 wynagrodzenie_i_wyposazenie = Entry.new(date: '2011-01-01', name: 'entry 5: darowizna, wyposazenie', document_number: 'dar34', journal: wigryk2011b, is_expense: true)
 
 darowizna.items << Item.create(amount: 1, category: darowizny_2012)
