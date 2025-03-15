@@ -326,23 +326,28 @@ class Entry < ApplicationRecord
     # ponieważ walidacja wymaga obecności items
     Rails.logger.info "** PODPOZYCJE: Tworzę items dla podpozycji - kwota 0,01 tylko dla pierwszej kategorii"
     
-    # Flaga do śledzenia czy już przypisaliśmy kwotę 0,01 do jakiejś kategorii
-    first_category_found = false
+    # Sortujemy items w taki sam sposób, jak są pokazywane w interfejsie (po id kategorii)
+    sorted_items = self.items.sort_by { |item| item.category_id }
+    Rails.logger.info "** PODPOZYCJE: Znaleziono #{sorted_items.size} kategorii do przetworzenia"
     
-    # Tworzymy items z kwotą 0,01 tylko dla pierwszej kategorii, reszta 0,00
-    self.items.each do |item|
-      # Określ kwotę na podstawie tego, czy to pierwsza kategoria
+    # Dodajemy flagę, że pierwszej kategorii została już przypisana kwota
+    first_item_processed = false
+    
+    # Dodaj wszystkie items z posortowanej listy, ale tylko pierwszej przypisz kwotę 0,01
+    sorted_items.each do |item|
       amount_value = 0.00
       amount_one_percent_value = 0.00
       
-      # Jeśli to pierwsza kategoria, przypisujemy kwotę 0,01
-      if !first_category_found
+      # Tylko dla pierwszej kategorii w posortowanej liście ustawiamy kwotę 0,01
+      if !first_item_processed
         amount_value = 0.01
-        # Dla kategorii 1% ustawiamy również amount_one_percent na 0,01
         amount_one_percent_value = item.category.is_one_percent ? 0.01 : 0.00
-        first_category_found = true
+        first_item_processed = true
+        Rails.logger.info "** PODPOZYCJE: Dodaję kwotę 0,01 do pierwszej kategorii (id=#{item.category_id}): #{item.category.name}"
+      else
+        Rails.logger.info "** PODPOZYCJE: Dodaję kwotę 0,00 do kategorii (id=#{item.category_id}): #{item.category.name}"
       end
-        
+      
       # Użyj build zamiast create, aby utworzyć obiekt ale nie zapisywać go jeszcze
       new_item = subentry.items.build(
         amount: amount_value,
@@ -353,7 +358,7 @@ class Entry < ApplicationRecord
     
     # Zapisanie podpozycji razem z wszystkimi powiązanymi items
     if subentry.save
-      Rails.logger.info "** PODPOZYCJE: Utworzono podpozycję #{position} (ID: #{subentry.id}) z #{subentry.items.count} items, kwota 0,01 tylko w pierwszej kategorii"
+      Rails.logger.info "** PODPOZYCJE: Utworzono podpozycję #{position} (ID: #{subentry.id}) z #{subentry.items.count} items, kwota 0,01 w pierwszej kategorii"
       return subentry
     else
       Rails.logger.error "** PODPOZYCJE: Błąd podczas tworzenia podpozycji #{position}: #{subentry.errors.full_messages.join(', ')}"
