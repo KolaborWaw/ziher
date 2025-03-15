@@ -7,7 +7,6 @@ class BankAccountsController < ApplicationController
 
   def index
     @units = Unit.all.order(:code)
-    @import_logs = BankImportLog.limit(20)
   end
 
   def upload_associations
@@ -23,16 +22,6 @@ class BankAccountsController < ApplicationController
     begin
       csv_data = params[:csv_file].read.force_encoding('UTF-8')
       csv_data.gsub!(/\r\n?/, "\n") # Normalize line endings
-      
-      # Utwórz log importu
-      import_log = BankImportLog.create_import_log(
-        user_id: current_user.id,
-        unit_id: Unit.first.id, # Placeholder, bo importujemy dla wielu jednostek
-        file_name: params[:csv_file].original_filename,
-        account_number: 'various', # Wiele numerów kont
-        year: Date.today.year,
-        ip_address: request.remote_ip
-      )
       
       line_number = 0
       success_count = 0
@@ -84,13 +73,6 @@ class BankAccountsController < ApplicationController
         end
       end
       
-      # Aktualizuj log importu
-      import_log.update(
-        success_count: success_count,
-        error_count: error_count,
-        error_messages: errors
-      )
-      
       if error_count > 0
         redirect_to bank_accounts_path, alert: "Numery kont zostały zaktualizowane z błędami (#{success_count} sukces, #{error_count} błędy)"
       else
@@ -103,7 +85,6 @@ class BankAccountsController < ApplicationController
 
   def upload_elixir
     # For elixir file upload page
-    @import_logs = BankImportLog.where(user_id: current_user.id).limit(10)
   end
 
   def process_elixir
@@ -169,18 +150,8 @@ class BankAccountsController < ApplicationController
           next
         end
         
-        # Utwórz log importu
-        import_log = BankImportLog.create_import_log(
-          user_id: current_user.id,
-          unit_id: unit.id,
-          file_name: filename,
-          account_number: account_number,
-          year: Date.today.year,
-          ip_address: request.remote_ip
-        )
-        
         # Process Elixir file
-        import_result = import_elixir_data(elixir_data, unit, import_log)
+        import_result = import_elixir_data(elixir_data, unit, nil)
         success_count += import_result[:success_count]
         error_count += import_result[:error_count]
         error_messages.concat(import_result[:error_messages])
@@ -226,19 +197,6 @@ class BankAccountsController < ApplicationController
     # Delete all entries
     entries_count = bank_journal.entries.count
     
-    # Utwórz log usunięcia wpisów
-    BankImportLog.create_import_log(
-      user_id: current_user.id,
-      unit_id: @unit.id,
-      file_name: "clear_entries_#{@year}",
-      account_number: @unit.bank_account,
-      year: @year,
-      success_count: entries_count,
-      error_count: 0,
-      error_messages: ["Usunięto wszystkie wpisy z książki bankowej"],
-      ip_address: request.remote_ip
-    )
-    
     bank_journal.entries.destroy_all
     
     redirect_to bank_accounts_path, notice: "Usunięto #{entries_count} wpisów z książki bankowej jednostki #{@unit.name} za rok #{@year}"
@@ -254,10 +212,6 @@ class BankAccountsController < ApplicationController
     else
       redirect_to bank_accounts_path, alert: "Nie udało się zmienić ustawienia auto importu dla jednostki #{@unit.name}"
     end
-  end
-  
-  def logs
-    @logs = BankImportLog.includes(:user, :unit).page(params[:page]).per(50)
   end
 
   private
@@ -287,14 +241,12 @@ class BankAccountsController < ApplicationController
     if bank_journal.nil?
       error_count += 1
       error_messages << "Nie znaleziono książki bankowej dla jednostki #{unit.name} za rok #{current_year}"
-      import_log.add_errors(error_messages, error_count) if import_log
       return { success_count: success_count, error_count: error_count, error_messages: error_messages }
     end
     
     if !bank_journal.is_open
       error_count += 1
       error_messages << "Książka bankowa dla jednostki #{unit.name} za rok #{current_year} jest zamknięta"
-      import_log.add_errors(error_messages, error_count) if import_log
       return { success_count: success_count, error_count: error_count, error_messages: error_messages }
     end
     
@@ -305,7 +257,6 @@ class BankAccountsController < ApplicationController
     if income_category.nil? || expense_category.nil?
       error_count += 1
       error_messages << "Brak kategorii przychodów lub wydatków dla roku #{current_year}"
-      import_log.add_errors(error_messages, error_count) if import_log
       return { success_count: success_count, error_count: error_count, error_messages: error_messages }
     end
     
@@ -328,69 +279,84 @@ class BankAccountsController < ApplicationController
           next
         end
         
-        # Parsuj datę transakcji (zakładając format RRRR-MM-DD w pierwszej kolumnie)
+        # Parsuj datę transakcji - kolumna 2
         begin
-          transaction_date = Date.parse(columns[0])
+          transaction_date = Date.parse(columns[1])
         rescue ArgumentError
           error_count += 1
-          error_messages << "Linia #{line_number}: Nieprawidłowy format daty (#{columns[0]})"
+          error_messages << "Linia #{line_number}: Nieprawidłowy format daty (#{columns[1]})"
           next
         end
         
-        # Parsuj kwotę (druga kolumna)
+        # Sprawdź czy transakcja jest z bieżącego roku
+        if transaction_date.year != current_year
+          error_count += 1
+          error_messages << "Linia #{line_number}: Transakcja nie jest z bieżącego roku (#{transaction_date.year})"
+          next
+        end
+        
+        # Parsuj kwotę - kolumna 3 (w groszach)
         begin
-          amount = columns[1].to_f
+          amount_in_cents = columns[2].to_i
+          amount = amount_in_cents / 100.0
+          
+          # Określ czy to wydatek czy wpływ na podstawie kolumny 1 (111=wpływ, 222=wydatek)
+          is_expense = columns[0] == "222"
+          if is_expense
+            amount = -amount  # Wydatek ma być ujemny
+          end
         rescue
           error_count += 1
-          error_messages << "Linia #{line_number}: Nieprawidłowy format kwoty (#{columns[1]})"
+          error_messages << "Linia #{line_number}: Nieprawidłowy format kwoty (#{columns[2]})"
           next
         end
         
-        # Ustaw opis transakcji (trzecia kolumna - tytuł przelewu)
-        description = columns[2].to_s.strip
+        # Pobierz tytuł przelewu - kolumna 12
+        transaction_title = columns[11].to_s.strip
         
-        # Ustaw numer dokumentu (np. numer referencyjny z banku)
-        document_number = "ELIXIR/#{transaction_date.strftime('%Y%m%d')}/#{columns.last}"
+        # Pobierz id transakcji - kolumna 14
+        transaction_id = columns[13].to_s.strip
         
-        # Kto wpłacił/komu wypłacono (czwarta kolumna - nadawca/odbiorca)
-        counterparty = columns[3].to_s.strip
+        # Pobierz lub utwórz numer wyciągu - kolumna 15 lub format MM/YYYY
+        statement_number = ""
+        if columns.length >= 15 && columns[14].present?
+          statement_number = columns[14].to_s.strip
+        else
+          # Jeśli brak numeru wyciągu, użyj formatu MM/YYYY
+          statement_number = "#{transaction_date.month}/#{transaction_date.year}"
+        end
         
-        # Utwórz wpis
+        # Utwórz wpis - używając dostępnych pól zgodnie z instrukcją
         entry = bank_journal.entries.new(
-          date: transaction_date,
-          document_number: document_number,
-          description: description,
-          counterparty: counterparty,
-          is_expense: amount < 0,  # Ujemna kwota = wydatek
-          document_date: transaction_date
+          date: transaction_date,         # Data transakcji
+          document_number: transaction_id, # ID transakcji jako numer dokumentu
+          name: transaction_title,        # Tytuł/opis transakcji 
+          is_expense: is_expense,         # Czy to wydatek
+          statement_number: statement_number   # Numer wyciągu
+          # Brak document_date - zgodnie z instrukcją nie uzupełniamy
         )
         
         # Dodaj pozycję do wpisu
-        category = amount < 0 ? expense_category : income_category
+        category = is_expense ? expense_category : income_category
         entry.items.build(
           category: category,
-          amount: amount.abs,  # Zawsze dodatnia kwota w pozycji
-          description: description
+          amount: amount.abs  # Zawsze dodatnia kwota w pozycji
         )
         
         # Zapisz wpis
         if entry.save
           success_count += 1
-          import_log.add_success(1) if import_log
         else
           error_count += 1
           error_messages << "Linia #{line_number}: Nie udało się zapisać wpisu - #{entry.errors.full_messages.join(', ')}"
-          import_log.add_errors(["Linia #{line_number}: Nie udało się zapisać wpisu - #{entry.errors.full_messages.join(', ')}"], 1) if import_log
         end
         
       rescue CSV::MalformedCSVError => e
         error_count += 1
         error_messages << "Linia #{line_number}: Błąd parsowania CSV - #{e.message}"
-        import_log.add_errors(["Linia #{line_number}: Błąd parsowania CSV - #{e.message}"], 1) if import_log
       rescue => e
         error_count += 1
         error_messages << "Linia #{line_number}: Nieznany błąd - #{e.message}"
-        import_log.add_errors(["Linia #{line_number}: Nieznany błąd - #{e.message}"], 1) if import_log
       end
     end
     

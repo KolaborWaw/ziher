@@ -79,7 +79,6 @@ Rails.application.routes.draw do
       get :clear_journal_entries
       post :perform_clear_journal_entries
       post :toggle_auto_import
-      get :logs
     end
   end
 end
