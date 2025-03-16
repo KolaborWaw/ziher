@@ -25,6 +25,9 @@ class EntriesController < ApplicationController
     @linked_entry = create_empty_items_in_linked_entry(@entry)
     @referer = request.referer
 
+    # Store the items parameter in the view context if present in the URL
+    @items_param = params[:items] if params[:items].present?
+
     respond_to do |format|
       format.html # new.html.erb
       format.json { render json: @entry }
@@ -79,10 +82,28 @@ class EntriesController < ApplicationController
           # Zawsze wracaj do strony, z której przyszedł użytkownik (referer),
           # a jeśli referer nie istnieje, wróć do widoku książki
           flash[:notice] = 'Entry created'
+          
+          # Extract items parameter from either the URL, form, or referer
+          items_param = ""
+          if params[:entry][:items].present?
+            items_param = "?items=#{params[:entry][:items]}"
+          elsif params[:items].present?
+            items_param = "?items=#{params[:items]}"
+          elsif @referer.present? && @referer.include?("items=")
+            items_param = "?#{@referer.split('?').last}" if @referer.include?('?')
+          end
+          
           redirect_destination = if @referer.present?
-            @referer
+            # If referer doesn't contain items parameter but we have one, add it
+            if !@referer.include?("items=") && items_param.present?
+              separator = @referer.include?('?') ? '&' : '?'
+              "#{@referer}#{separator}#{items_param.sub('?', '')}"
+            else
+              @referer
+            end
           else
-            journal_path(@entry.journal)
+            # If no referer, redirect to journal with items parameter
+            "#{journal_path(@entry.journal)}#{items_param}"
           end
           
           redirect_to redirect_destination
@@ -130,6 +151,9 @@ class EntriesController < ApplicationController
 
     @sorted_items = @entry.items.sort_by {|item| item.category.position.to_s}
     @referer = request.referer
+    
+    # Store the items parameter in the view context if present in the URL
+    @items_param = params[:items] if params[:items].present?
     
     # Jeśli referer nie istnieje lub prowadzi do nieprawidłowej strony, użyj widoku książki jako fallback
     if @referer.blank? || !(@referer =~ /journals/)
@@ -240,12 +264,27 @@ class EntriesController < ApplicationController
         session[:entry_type_changed] = nil
         
         format.html do
-          # Zawsze wracaj do strony, z której przyszedł użytkownik (referer),
-          # a jeśli referer nie istnieje, wróć do widoku książki
+          # Extract items parameter from either the URL, form, or referer
+          items_param = ""
+          if params[:entry][:items].present?
+            items_param = "?items=#{params[:entry][:items]}"
+          elsif params[:items].present?
+            items_param = "?items=#{params[:items]}"
+          elsif @referer.present? && @referer.include?("items=")
+            items_param = "?#{@referer.split('?').last}" if @referer.include?('?')
+          end
+          
           redirect_destination = if @referer.present?
-            @referer
+            # If referer doesn't contain items parameter but we have one, add it
+            if !@referer.include?("items=") && items_param.present?
+              separator = @referer.include?('?') ? '&' : '?'
+              "#{@referer}#{separator}#{items_param.sub('?', '')}"
+            else
+              @referer
+            end
           else
-            journal_path(@journal)
+            # If no referer, redirect to journal with items parameter
+            "#{journal_path(@journal)}#{items_param}"
           end
           
           redirect_to redirect_destination

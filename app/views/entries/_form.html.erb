@@ -3,6 +3,9 @@
 
 <%= form_for(@entry) do |f| %>
   <%= f.hidden_field :referer, { value: @referer } %>
+  <% if params[:items].present? || @items_param.present? %>
+    <%= f.hidden_field :items, { value: params[:items] || @items_param } %>
+  <% end %>
   <% if @entry.errors.any? %>
     <div id="error_explanation">
       <h2>Wystąpiły błędy podczas próby zapisu:</h2>
