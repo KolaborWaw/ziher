@@ -102,18 +102,14 @@
               <div class="col-md-6">
                 <label>Liczba podpozycji:</label>
                 <p class="form-control-static">To jest podpozycja wpisu głównego</p>
-                <input type="hidden" name="subentries_count" value="1">
+                <%= f.hidden_field :subentries_count, value: 1 %>
               </div>
             <% else %>
               <!-- Dla głównych wpisów w księdze bankowej pokazujemy selektor liczby podpozycji -->
               <div class="col-md-6">
-                <label for="subentries_count">Liczba podpozycji:</label>
+                <%= f.label :subentries_count, "Liczba podpozycji:" %>
                 <div class="form-inline">
-                  <select name="subentries_count" id="subentries_count" class="form-control" style="width: auto;">
-                    <% (1..9).each do |i| %>
-                      <option value="<%= i %>" <%= 'selected' if @entry.subentries_count == i || (i == 1 && @entry.id.nil?) %>><%= i %></option>
-                    <% end %>
-                  </select>
+                  <%= f.select :subentries_count, options_for_select((1..9).map{|i| [i.to_s, i]}, @entry.subentries_count || 1), {}, { class: "form-control", style: "width: auto;" } %>
                   <small class="text-muted" style="margin-left: 10px;">Wpisy będą pokazywane jako 2a, 2b, 2c itd.</small>
                 </div>
               </div>

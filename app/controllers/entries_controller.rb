@@ -57,14 +57,14 @@ class EntriesController < ApplicationController
           subentries_count = params[:entry][:subentries_count].to_i
           Rails.logger.info "** SUBENTRIES CONTROLLER CREATE: Selected subentries count: #{subentries_count}"
           
-          if subentries_count > 0 && subentries_count <= 9
+          if @entry.can_have_subentries? && subentries_count > 0 && subentries_count <= 9
             Rails.logger.info "** SUBENTRIES CONTROLLER CREATE: Calling update_subentries(#{subentries_count - 1})"
             @entry.update_subentries(subentries_count - 1) # -1 because the main entry counts as the first subentry
           else
-            Rails.logger.info "** SUBENTRIES CONTROLLER CREATE: Invalid subentries count: #{subentries_count}"
+            Rails.logger.info "** SUBENTRIES CONTROLLER CREATE: Invalid subentries count: #{subentries_count} or entry cannot have subentries"
           end
         else
-          Rails.logger.info "** SUBENTRIES CONTROLLER CREATE: Conditions for creating subentries not met"
+          Rails.logger.info "** SUBENTRIES CONTROLLER CREATE: No subentries count parameter provided"
         end
         
       rescue => e
@@ -210,14 +210,14 @@ class EntriesController < ApplicationController
           subentries_count = params[:entry][:subentries_count].to_i
           Rails.logger.info "** SUBENTRIES CONTROLLER UPDATE: Selected subentries count: #{subentries_count}"
           
-          if subentries_count >= 0 && subentries_count <= 9
+          if @entry.can_have_subentries? && subentries_count >= 0 && subentries_count <= 9
             Rails.logger.info "** SUBENTRIES CONTROLLER UPDATE: Calling update_subentries(#{subentries_count - 1})"
             @entry.update_subentries(subentries_count - 1) # -1 because the main entry counts as the first subentry
           else
-            Rails.logger.info "** SUBENTRIES CONTROLLER UPDATE: Invalid subentries count: #{subentries_count}"
+            Rails.logger.info "** SUBENTRIES CONTROLLER UPDATE: Invalid subentries count: #{subentries_count} or entry cannot have subentries"
           end
         else
-          Rails.logger.info "** SUBENTRIES CONTROLLER UPDATE: Conditions for creating subentries not met"
+          Rails.logger.info "** SUBENTRIES CONTROLLER UPDATE: No subentries count parameter provided"
         end
         
       rescue => e
