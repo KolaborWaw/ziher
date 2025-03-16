@@ -1,5 +1,5 @@
 # encoding: utf-8
-# TODO: wywalic stringi do I18n
+# TODO: move strings to I18n
 class Entry < ApplicationRecord
   include ActiveModel::Validations
   audited
@@ -243,7 +243,7 @@ class Entry < ApplicationRecord
   # Czy wpis może mieć podpozycje (tylko główne wpisy w księdze bankowej mogą mieć podpozycje)
   def can_have_subentries?
     result = !is_subentry && journal && journal.journal_type_id == JournalType::BANK_TYPE_ID
-    Rails.logger.info "** PODPOZYCJE: can_have_subentries? = #{result} (is_subentry=#{is_subentry}, journal=#{journal&.id}, type=#{journal&.journal_type_id}, bank_type=#{JournalType::BANK_TYPE_ID})"
+    Rails.logger.info "** SUBENTRIES: can_have_subentries? = #{result} (is_subentry=#{is_subentry}, journal=#{journal&.id}, type=#{journal&.journal_type_id}, bank_type=#{JournalType::BANK_TYPE_ID})"
     result
   end
   
@@ -252,58 +252,58 @@ class Entry < ApplicationRecord
     return position.to_s unless can_have_subentries? || is_subentry
     
     if is_subentry
-      Rails.logger.info "** PODPOZYCJE: Generuję etykietę dla podpozycji id=#{id}, parent_id=#{parent_entry_id}, pozycja=#{position}#{subentry_position}"
+      Rails.logger.info "** SUBENTRIES: Generating label for subentry id=#{id}, parent_id=#{parent_entry_id}, position=#{position}#{subentry_position}"
       "#{position}#{subentry_position}"
     else
       # Główne wpisy z podpozycjami mają oznaczenie "2a"
-      Rails.logger.info "** PODPOZYCJE: Generuję etykietę dla głównego wpisu id=#{id}, pozycja=#{position}a"
+      Rails.logger.info "** SUBENTRIES: Generating label for main entry id=#{id}, position=#{position}a"
       "#{position}a"
     end
   end
   
   # Tworzenie lub aktualizacja podpozycji
   def update_subentries(new_count)
-    Rails.logger.info "** PODPOZYCJE: Wywołano update_subentries z liczbą #{new_count}"
+    Rails.logger.info "** SUBENTRIES: Called update_subentries with count #{new_count}"
     
     unless can_have_subentries?
-      Rails.logger.info "** PODPOZYCJE: Nie można utworzyć podpozycji. is_subentry=#{is_subentry}, journal_present=#{journal.present?}, journal_type=#{journal&.journal_type_id}, bank_type=#{JournalType::BANK_TYPE_ID}"
+      Rails.logger.info "** SUBENTRIES: Cannot create subentries. is_subentry=#{is_subentry}, journal_present=#{journal.present?}, journal_type=#{journal&.journal_type_id}, bank_type=#{JournalType::BANK_TYPE_ID}"
       return
     end
     
     current_count = subentries.count
-    Rails.logger.info "** PODPOZYCJE: Aktualna liczba podpozycji: #{current_count}"
+    Rails.logger.info "** SUBENTRIES: Current subentry count: #{current_count}"
     
     # Nie rób nic, jeśli liczba podpozycji się nie zmieniła
     if new_count == current_count
-      Rails.logger.info "** PODPOZYCJE: Liczba nie zmieniła się, pomijam"
+      Rails.logger.info "** SUBENTRIES: Count did not change, skipping"
       return
     end
     
     # Aktualizacja liczby podpozycji w głównym wpisie
-    Rails.logger.info "** PODPOZYCJE: Aktualizuję liczbę podpozycji na #{new_count + 1}"
+    Rails.logger.info "** SUBENTRIES: Updating subentry count to #{new_count + 1}"
     update_column(:subentries_count, new_count + 1) # +1 ponieważ główny wpis liczy się jako pierwsza podpozycja ("a")
     
     if new_count > current_count
       # Dodawanie nowych podpozycji
-      Rails.logger.info "** PODPOZYCJE: Dodaję #{new_count - current_count} nowych podpozycji"
+      Rails.logger.info "** SUBENTRIES: Adding #{new_count - current_count} new subentries"
       ('b'.ord + current_count..'b'.ord + new_count - 1).each_with_index do |char_code, index|
         position = char_code.chr
-        Rails.logger.info "** PODPOZYCJE: Tworzę podpozycję #{position}"
+        Rails.logger.info "** SUBENTRIES: Creating subentry #{position}"
         create_subentry(position, index + current_count + 1)
       end
     elsif new_count < current_count
       # Usuwanie nadmiarowych podpozycji (od końca)
-      Rails.logger.info "** PODPOZYCJE: Usuwam #{current_count - new_count} nadmiarowych podpozycji"
+      Rails.logger.info "** SUBENTRIES: Removing #{current_count - new_count} excess subentries"
       subentries_to_remove = subentries.order(subentry_position: :desc).limit(current_count - new_count)
       subentries_to_remove.destroy_all
     end
     
-    Rails.logger.info "** PODPOZYCJE: Zakończono aktualizację podpozycji"
+    Rails.logger.info "** SUBENTRIES: Finished updating subentries"
   end
   
   # Tworzenie pojedynczej podpozycji
   def create_subentry(position, order_index)
-    Rails.logger.info "** PODPOZYCJE: Rozpoczynam tworzenie podpozycji #{position}"
+    Rails.logger.info "** SUBENTRIES: Starting to create subentry #{position}"
     
     # Kopiowanie wartości z głównego wpisu
     subentry = self.dup
@@ -315,7 +315,7 @@ class Entry < ApplicationRecord
     subentry.subentries_count = 1  # Podpozycje zawsze mają wartość 1
     
     # Zapisujemy informację w logach, aby pomóc w debugowaniu
-    Rails.logger.info "** PODPOZYCJE: Tworzę podpozycję dla głównego wpisu id=#{self.id}, pozycja=#{position}"
+    Rails.logger.info "** SUBENTRIES: Creating subentry for main entry id=#{self.id}, position=#{position}"
     
     # Ustawienie odpowiednich wartości domyślnych dla podpozycji
     subentry.name = "Nowa podpozycja do uzupełnienia"
@@ -324,11 +324,11 @@ class Entry < ApplicationRecord
     
     # WAŻNE: Musimy skopiować items PRZED zapisaniem podpozycji,
     # ponieważ walidacja wymaga obecności items
-    Rails.logger.info "** PODPOZYCJE: Tworzę items dla podpozycji - kwota 0,01 tylko dla pierwszej kategorii"
+    Rails.logger.info "** SUBENTRIES: Creating items for subentry - amount 0.01 only for first category"
     
     # Sortujemy items w taki sam sposób, jak są pokazywane w interfejsie (po id kategorii)
     sorted_items = self.items.sort_by { |item| item.category_id }
-    Rails.logger.info "** PODPOZYCJE: Znaleziono #{sorted_items.size} kategorii do przetworzenia"
+    Rails.logger.info "** SUBENTRIES: Found #{sorted_items.size} categories to process"
     
     # Dodajemy flagę, że pierwszej kategorii została już przypisana kwota
     first_item_processed = false
@@ -343,9 +343,9 @@ class Entry < ApplicationRecord
         amount_value = 0.01
         amount_one_percent_value = item.category.is_one_percent ? 0.01 : 0.00
         first_item_processed = true
-        Rails.logger.info "** PODPOZYCJE: Dodaję kwotę 0,01 do pierwszej kategorii (id=#{item.category_id}): #{item.category.name}"
+        Rails.logger.info "** SUBENTRIES: Adding amount 0.01 to first category (id=#{item.category_id}): #{item.category.name}"
       else
-        Rails.logger.info "** PODPOZYCJE: Dodaję kwotę 0,00 do kategorii (id=#{item.category_id}): #{item.category.name}"
+        Rails.logger.info "** SUBENTRIES: Adding amount 0.00 to category (id=#{item.category_id}): #{item.category.name}"
       end
       
       # Użyj build zamiast create, aby utworzyć obiekt ale nie zapisywać go jeszcze
@@ -358,10 +358,10 @@ class Entry < ApplicationRecord
     
     # Zapisanie podpozycji razem z wszystkimi powiązanymi items
     if subentry.save
-      Rails.logger.info "** PODPOZYCJE: Utworzono podpozycję #{position} (ID: #{subentry.id}) z #{subentry.items.count} items, kwota 0,01 w pierwszej kategorii"
+      Rails.logger.info "** SUBENTRIES: Created subentry #{position} (ID: #{subentry.id}) with #{subentry.items.count} items, amount 0.01 in first category"
       return subentry
     else
-      Rails.logger.error "** PODPOZYCJE: Błąd podczas tworzenia podpozycji #{position}: #{subentry.errors.full_messages.join(', ')}"
+      Rails.logger.error "** SUBENTRIES: Error creating subentry #{position}: #{subentry.errors.full_messages.join(', ')}"
       return nil
     end
   end

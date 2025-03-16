@@ -51,36 +51,34 @@ class EntriesController < ApplicationController
       begin
         save_success = @entry.save
         
-        # Obsługa podpozycji dla księgi bankowej
-        Rails.logger.info "** PODPOZYCJE KONTROLER CREATE: Sprawdzam warunki dla podpozycji"
-        Rails.logger.info "** PODPOZYCJE KONTROLER CREATE: can_have_subentries=#{@entry.can_have_subentries?}, params=#{params[:subentries_count]}"
-        
-        if save_success && @entry.can_have_subentries?
-          subentries_count = params[:subentries_count].to_i
-          Rails.logger.info "** PODPOZYCJE KONTROLER CREATE: Wybrana liczba podpozycji: #{subentries_count}"
+        # Process subentries parameters if needed
+        if params[:entry][:subentries_count].present?
+          Rails.logger.info "** SUBENTRIES CONTROLLER CREATE: Checking conditions for subentries"
+          subentries_count = params[:entry][:subentries_count].to_i
+          Rails.logger.info "** SUBENTRIES CONTROLLER CREATE: Selected subentries count: #{subentries_count}"
           
           if subentries_count > 0 && subentries_count <= 9
-            Rails.logger.info "** PODPOZYCJE KONTROLER CREATE: Wywołuję update_subentries(#{subentries_count - 1})"
-            @entry.update_subentries(subentries_count - 1) # -1 ponieważ główny wpis liczy się jako pierwsza podpozycja
+            Rails.logger.info "** SUBENTRIES CONTROLLER CREATE: Calling update_subentries(#{subentries_count - 1})"
+            @entry.update_subentries(subentries_count - 1) # -1 because the main entry counts as the first subentry
           else
-            Rails.logger.info "** PODPOZYCJE KONTROLER CREATE: Nieprawidłowa liczba podpozycji: #{subentries_count}"
+            Rails.logger.info "** SUBENTRIES CONTROLLER CREATE: Invalid subentries count: #{subentries_count}"
           end
         else
-          Rails.logger.info "** PODPOZYCJE KONTROLER CREATE: Nie spełniono warunków do utworzenia podpozycji"
+          Rails.logger.info "** SUBENTRIES CONTROLLER CREATE: Conditions for creating subentries not met"
         end
         
       rescue => e
         # Obsługa błędów podczas zapisywania
-        Rails.logger.error("Błąd podczas tworzenia wpisu: #{e.message}")
+        Rails.logger.error("Error while creating entry: #{e.message}")
         save_success = false
-        @entry.errors.add(:base, "Wystąpił błąd podczas zapisywania: #{e.message}")
+        @entry.errors.add(:base, "Error occurred while saving: #{e.message}")
       end
       
       if save_success
         format.html do
           # Zawsze wracaj do strony, z której przyszedł użytkownik (referer),
           # a jeśli referer nie istnieje, wróć do widoku książki
-          flash[:notice] = 'Wpis utworzony'
+          flash[:notice] = 'Entry created'
           redirect_destination = if @referer.present?
             @referer
           else
@@ -206,38 +204,36 @@ class EntriesController < ApplicationController
           Rails.logger.info "** PODPOZYCJE KONTROLER UPDATE: Zakończono aktualizację podpozycji"
         end
         
-        # Obsługa podpozycji dla głównych wpisów w księdze bankowej
-        Rails.logger.info "** PODPOZYCJE KONTROLER UPDATE: Sprawdzam warunki dla podpozycji"
-        Rails.logger.info "** PODPOZYCJE KONTROLER UPDATE: can_have_subentries=#{@entry.can_have_subentries?}, params=#{params[:subentries_count]}"
-        
-        if update_success && @entry.can_have_subentries?
-          subentries_count = params[:subentries_count].to_i
-          Rails.logger.info "** PODPOZYCJE KONTROLER UPDATE: Wybrana liczba podpozycji: #{subentries_count}"
+        # Process subentries first if applicable
+        if params[:entry][:subentries_count].present?
+          Rails.logger.info "** SUBENTRIES CONTROLLER UPDATE: Checking conditions for subentries"
+          subentries_count = params[:entry][:subentries_count].to_i
+          Rails.logger.info "** SUBENTRIES CONTROLLER UPDATE: Selected subentries count: #{subentries_count}"
           
           if subentries_count >= 0 && subentries_count <= 9
-            Rails.logger.info "** PODPOZYCJE KONTROLER UPDATE: Wywołuję update_subentries(#{subentries_count - 1})"
-            @entry.update_subentries(subentries_count - 1) # -1 ponieważ główny wpis liczy się jako pierwsza podpozycja
+            Rails.logger.info "** SUBENTRIES CONTROLLER UPDATE: Calling update_subentries(#{subentries_count - 1})"
+            @entry.update_subentries(subentries_count - 1) # -1 because the main entry counts as the first subentry
           else
-            Rails.logger.info "** PODPOZYCJE KONTROLER UPDATE: Nieprawidłowa liczba podpozycji: #{subentries_count}"
+            Rails.logger.info "** SUBENTRIES CONTROLLER UPDATE: Invalid subentries count: #{subentries_count}"
           end
         else
-          Rails.logger.info "** PODPOZYCJE KONTROLER UPDATE: Nie spełniono warunków do utworzenia podpozycji"
+          Rails.logger.info "** SUBENTRIES CONTROLLER UPDATE: Conditions for creating subentries not met"
         end
         
       rescue => e
         # Obsługa błędów podczas aktualizacji
-        Rails.logger.error("Błąd podczas aktualizacji wpisu: #{e.message}")
+        Rails.logger.error("Error while updating entry: #{e.message}")
         update_success = false
-        @entry.errors.add(:base, "Wystąpił błąd podczas zapisywania: #{e.message}")
+        @entry.errors.add(:base, "Error occurred while saving: #{e.message}")
       end
       
       # Sprawdź, czy aktualizacja się powiodła
       if update_success
         # Sprawdź czy zmienił się typ wpisu
         if original_is_expense != @entry.is_expense
-          flash[:notice] = "Zmiany zapisane. Zmieniono typ wpisu z #{original_is_expense ? 'wydatku' : 'wpływu'} na #{@entry.is_expense ? 'wydatek' : 'wpływ'}."
+          flash[:notice] = "Changes saved. Changed entry type from #{original_is_expense ? 'expense' : 'income'} to #{@entry.is_expense ? 'expense' : 'income'}."
         else
-          flash[:notice] = "Zmiany zapisane"
+          flash[:notice] = "Changes saved"
         end
         
         # Wyczyść informację o zmianie typu z sesji
@@ -327,7 +323,7 @@ class EntriesController < ApplicationController
       end
     rescue => e
       # Loguj błąd, ale nie przerywaj wykonania
-      Rails.logger.error("Błąd podczas tworzenia pustych items: #{e.message}")
+      Rails.logger.error("Error while creating empty items: #{e.message}")
     end
   end
 

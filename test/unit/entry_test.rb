@@ -224,4 +224,104 @@ class EntryTest < ActiveSupport::TestCase
     assert_equal expected_amount, entry.sum_one_percent
   end
 
+  test "should create subentries for bank journal entries" do
+    # Setup
+    journal = journals(:bank_journal)
+    entry = Entry.new(
+      journal: journal,
+      date: Date.today,
+      name: "Test Entry with Subentries",
+      document_number: "DOC123",
+      statement_number: "STMT123",
+      is_expense: false
+    )
+    
+    # Add a category item
+    category = categories(:one)
+    entry.items.build(category: category, amount: 100.0)
+    
+    # Save the main entry
+    assert entry.save, "Failed to save the main entry"
+    
+    # Verify entry can have subentries
+    assert entry.can_have_subentries?, "Entry should be able to have subentries"
+    
+    # Create subentries
+    entry.update_subentries(2) # Create 2 subentries (b and c)
+    
+    # Verify subentries were created
+    assert_equal 2, entry.subentries.count, "Should have 2 subentries"
+    assert_equal 3, entry.subentries_count, "Subentries count should be 3 (including main entry)"
+    
+    # Verify subentry properties
+    subentry = entry.subentries.first
+    assert subentry.is_subentry, "Subentry should have is_subentry=true"
+    assert_equal entry.id, subentry.parent_entry_id, "Subentry should reference parent entry"
+    assert_not_nil subentry.subentry_position, "Subentry should have a position"
+  end
+  
+  test "should not create subentries for non-bank journal entries" do
+    # Setup
+    journal = journals(:finance_journal)
+    entry = Entry.new(
+      journal: journal,
+      date: Date.today,
+      name: "Test Entry",
+      document_number: "DOC123",
+      is_expense: false
+    )
+    
+    # Add a category item
+    category = categories(:one)
+    entry.items.build(category: category, amount: 100.0)
+    
+    # Save the entry
+    assert entry.save, "Failed to save the entry"
+    
+    # Verify entry cannot have subentries
+    assert_not entry.can_have_subentries?, "Finance entry should not be able to have subentries"
+    
+    # Try to create subentries
+    entry.update_subentries(2)
+    
+    # Verify no subentries were created
+    assert_equal 0, entry.subentries.count, "Should have no subentries"
+  end
+  
+  test "should update subentries count correctly" do
+    # Setup
+    journal = journals(:bank_journal)
+    entry = Entry.new(
+      journal: journal,
+      date: Date.today,
+      name: "Test Entry with Subentries",
+      document_number: "DOC123",
+      statement_number: "STMT123",
+      is_expense: false
+    )
+    
+    # Add a category item
+    category = categories(:one)
+    entry.items.build(category: category, amount: 100.0)
+    
+    # Save the main entry
+    assert entry.save, "Failed to save the main entry"
+    
+    # Create 2 subentries
+    entry.update_subentries(2)
+    assert_equal 2, entry.subentries.count, "Should have 2 subentries"
+    
+    # Increase to 3 subentries
+    entry.update_subentries(3)
+    assert_equal 3, entry.subentries.count, "Should have 3 subentries"
+    
+    # Decrease to 1 subentry
+    entry.update_subentries(1)
+    assert_equal 1, entry.subentries.count, "Should have 1 subentry"
+    
+    # Remove all subentries
+    entry.update_subentries(0)
+    assert_equal 0, entry.subentries.count, "Should have no subentries"
+  end
+
 end

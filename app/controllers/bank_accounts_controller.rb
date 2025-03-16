@@ -260,8 +260,8 @@ class BankAccountsController < ApplicationController
       return { success_count: success_count, error_count: error_count, error_messages: error_messages }
     end
     
-    # Zbierz wszystkie wpisy do przetworzenia
-    entries_to_import = []
+    # Collect all entries for processing
+    entries_to_process = []
     
     line_number = 0
     elixir_data.each_line do |line|

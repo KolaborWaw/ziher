@@ -17,10 +17,10 @@ class Unit < ApplicationRecord
       return Unit.where(is_active: is_active)
     end
 
-    # Tworzymy klucz cache uwzględniający ID użytkownika i wartość is_active
+    # Creating a cache key that includes user ID and is_active value
     cache_key = "user_#{user.id}_units_#{is_active}"
     
-    # Próba pobrania z pamięci podręcznej Rails
+    # Try to fetch from Rails cache
     Rails.cache.fetch(cache_key, expires_in: 30.minutes) do
       Unit.find_all_by_user(user)
         .select{|unit| unit.is_active == is_active and user.can_view_unit_entries(unit)}
@@ -48,21 +48,33 @@ class Unit < ApplicationRecord
   # Returns years for which the unit has journals of given type, plus current year.
   # Years are sorted oldest first.
   def find_journal_years(journal_type)
-    # Tworzę klucz pamięci podręcznej, który zawiera ID jednostki i typ dziennika
-    cache_key = "unit_#{id}_journal_type_#{journal_type.id}_years"
+    # Creating a cache key that includes unit ID and journal type
+    cache_key = "unit_#{self.id}_journal_years_#{journal_type.id}"
     
-    # Sprawdzam, czy dane są już w pamięci podręcznej instancji
-    @cached_years ||= {}
-    return @cached_years[cache_key] if @cached_years[cache_key]
+    # Initialize instance cache if not exists
+    @journal_years_cache ||= {}
     
-    # Wykonanie głównego zapytania, jeśli dane nie są w pamięci podręcznej
-    result = self.journals.where(journal_type_id: journal_type.id).map{|journal| journal.year}
-    result << Time.now.year
+    # Checking if data is already in instance cache
+    if @journal_years_cache && @journal_years_cache[cache_key]
+      return @journal_years_cache[cache_key]
+    end
     
-    # Zapisanie wyniku w pamięci podręcznej instancji
-    @cached_years[cache_key] = result.uniq.sort
+    # Try to fetch from Rails cache
+    result = Rails.cache.fetch(cache_key, expires_in: 15.minutes) do
+      # Get years from existing journals
+      journal_years = self.journals.where(journal_type_id: journal_type).pluck(:year)
+      
+      # Add current year if not present
+      current_year = Date.today.year
+      journal_years << current_year unless journal_years.include? current_year
+      
+      journal_years.uniq.sort
+    end
     
-    return @cached_years[cache_key]
+    # Store in instance cache for faster subsequent access
+    @journal_years_cache[cache_key] = result
+    
+    return result
   end
 
   def initial_finance_balance(year)

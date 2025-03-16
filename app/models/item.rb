@@ -1,5 +1,5 @@
 # encoding: utf-8
-# TODO: wywalic stringi do I18n
+# TODO: move strings to I18n
 class Item < ApplicationRecord
   audited
 
@@ -55,14 +55,14 @@ class Item < ApplicationRecord
   def cannot_have_amount_one_percent_greater_than_amount
     if self.amount != nil && self.amount_one_percent != nil
       if self.amount_one_percent.abs > self.amount.abs && !category.is_one_percent
-        errors[:items] << " - wartość dla 1% (#{self.amount_one_percent}) musi być mniejsza niż wartość główna (#{self.amount})"
+        errors[:items] << " - value for 1% (#{self.amount_one_percent}) must be less than main value (#{self.amount})"
       end
     end
   end
 
   def cannot_have_amount_one_percent_if_amount_is_nil
     if self.amount == nil && self.amount_one_percent != nil && self.amount_one_percent != 0 then
-      errors[:items] << " - podano wartość dla 1% (#{self.amount_one_percent}) bez podania wartości głównej"
+      errors[:items] << " - provided value for 1% (#{self.amount_one_percent}) without providing main value"
     end
   end
 
@@ -70,7 +70,7 @@ class Item < ApplicationRecord
     grants_amounts = self.item_grants.map(&:amount).map(&:to_i)
 
     if self.amount == nil && grants_amounts.count > 0 && grants_amounts.sum != 0 then
-      errors[:items] << " - podano wartości dla dotacji (w sumie #{grants_amounts.sum}) bez podania wartości głównej"
+      errors[:items] << " - provided grant amounts (in sum #{grants_amounts.sum}) without providing main value"
     end
   end
 
@@ -78,7 +78,7 @@ class Item < ApplicationRecord
     grants_sum = self.item_grants.map(&:amount).sum(&:to_i) + self.amount_one_percent.to_i
     if grants_sum.abs > self.amount.to_i.abs
 
-      errors[:items] << "Suma z dotacji (" + grants_sum.to_s + ") musi mieścić się w wartości wpisu (" + self.amount.to_s + ")"
+      errors[:items] << "Sum of grants (" + grants_sum.to_s + ") must fit within item value (" + self.amount.to_s + ")"
     end
   end
 
@@ -96,7 +96,7 @@ class Item < ApplicationRecord
       end
 
       if error
-        errors[:items] << "Jeżeli wartość wpisu jest większa od 0 to wpisy dla dotacji też muszą być większe od 0"
+        errors[:items] << "If item value is greater than 0 then grant amounts must also be greater than 0"
       end
 
     elsif self.amount < 0
@@ -107,7 +107,7 @@ class Item < ApplicationRecord
       end
 
       if error
-        errors[:items] << "Jeżeli wartość wpisu jest mniejsza od 0 to wpisy dla dotacji też muszą być mniejsze od 0"
+        errors[:items] << "If item value is less than 0 then grant amounts must also be less than 0"
       end
     end
   end
