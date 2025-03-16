@@ -26,22 +26,7 @@ class AddNewFeatures < ActiveRecord::Migration[5.2]
       add_column :entries, :subentries_count, :integer, default: 1
     end
     
-    # Remove legacy fields if they exist
-    if column_exists?(:entries, :is_parent)
-      remove_column :entries, :is_parent
-    end
-    
-    if column_exists?(:entries, :parent_id)
-      remove_column :entries, :parent_id
-    end
-    
-    if column_exists?(:entries, :subentry_index)
-      remove_column :entries, :subentry_index
-    end
-    
-    if column_exists?(:entries, :subentry_count)
-      remove_column :entries, :subentry_count
-    end
+
     
     # Add statement number to entries (from AddStatementNumberToEntries)
     add_column :entries, :statement_number, :string unless column_exists?(:entries, :statement_number)
