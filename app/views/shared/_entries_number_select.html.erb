@@ -2,7 +2,7 @@
   <script type="text/javascript">
     function selectedItemsNumberChanged(items) {
       const itemsParam = items.toString() === "" ? "" : "?items=" + items.toString();
-      document.location.href = "<%= @journal.id %>" + itemsParam.toString();
+      document.location.href = "<%= journal_path(@journal) %>" + itemsParam.toString();
     }
   </script>
 
