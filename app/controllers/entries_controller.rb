@@ -311,7 +311,16 @@ class EntriesController < ApplicationController
     @entry.destroy
 
     respond_to do |format|
-      format.html { redirect_to journal_url(journal) }
+      # Preserve pagination setting by extracting items parameter from the URL
+      items_param = ""
+      if params[:items].present?
+        items_param = "?items=#{params[:items]}"
+      elsif request.referer.present? && request.referer.include?("items=")
+        items_param = "?#{request.referer.split('?').last}" if request.referer.include?('?')
+      end
+      
+      redirect_url = "#{journal_url(journal)}#{items_param}"
+      format.html { redirect_to redirect_url }
       format.json { head :ok }
     end
   end

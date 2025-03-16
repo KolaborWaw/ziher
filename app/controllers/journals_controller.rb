@@ -80,10 +80,46 @@ class JournalsController < ApplicationController
       @page = 0
     else
       @items = params[:items].to_i
-      @pagy, @entries = pagy(all_entries, page: params[:page], items: @items)
+      
+      # Group entries with their subentries to maintain proper numbering
+      if @journal.journal_type_id == JournalType::BANK_TYPE_ID
+        # Collect all main entries (non-subentries)
+        main_entries = all_entries.reject(&:is_subentry)
+        
+        # Calculate total count of main entries for pagination
+        total_main_entries = main_entries.count
+        
+        # Determine what page we're on
+        @page = params[:page].to_i
+        @page = 1 if @page < 1
+        
+        # Calculate which main entries should be on the current page
+        start_index = (@page - 1) * @items
+        end_index = [start_index + @items - 1, total_main_entries - 1].min
+        
+        # Get the main entries for this page
+        page_main_entries = main_entries[start_index..end_index] || []
+        
+        # Find all subentries for these main entries
+        page_entry_ids = page_main_entries.map(&:id)
+        subentries = all_entries.select { |e| e.is_subentry && page_entry_ids.include?(e.parent_entry_id) }
+        
+        # Combine main entries and their subentries
+        @entries = (page_main_entries + subentries).sort_by do |e|
+          [e.date, e.is_subentry ? e.parent_entry_id : e.id, e.is_subentry ? 1 : 0, e.subentry_position || '', e.id]
+        end
+        
+        # Create pagy instance manually
+        @pagy = Pagy.new(count: total_main_entries, page: @page, items: @items)
+      else
+        # For non-bank journals, use standard pagination
+        @pagy, @entries = pagy(all_entries, page: params[:page], items: @items)
+      end
+      
       @page = @pagy.page
     end
 
+    # Calculate the correct starting position for entry numbering
     @start_position = @page < 1 ? 0 : (@page - 1) * @items.to_i
     
     # Cachowanie dostępnych dla użytkownika jednostek
