@@ -143,7 +143,7 @@ class UnitsController < ApplicationController
 
   def unit_params
     if params[:unit]
-      params.require(:unit).permit(:name, :code, group_ids: [])
+      params.require(:unit).permit(:name, :code, :bank_account, :auto_bank_import, group_ids: [])
     end
   end
 end

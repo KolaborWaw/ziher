@@ -1,0 +1,74 @@
+<% content_for :title do %>
+  Potwierdzenie usunięcia wpisów z książki bankowej
+<% end %>
+
+<h1>Potwierdzenie usunięcia wpisów z książki bankowej</h1>
+
+<div class="alert alert-danger">
+  <h4><i class="glyphicon glyphicon-warning-sign"></i> Uwaga! Operacja nieodwracalna!</h4>
+  <p>
+    Ta operacja usunie <strong>wszystkie</strong> wpisy z książki bankowej jednostki <%= @unit.name %> za rok <%= @year %>.
+  </p>
+  <p>
+    Operacja jest nieodwracalna. Usuniętych danych nie będzie można odzyskać.
+  </p>
+</div>
+
+<div class="well">
+  <h3>Informacje o książce bankowej</h3>
+  <% bank_journal = @unit.journals.find_by(year: @year, journal_type_id: JournalType::BANK_TYPE_ID) %>
+  
+  <% if bank_journal && bank_journal.is_open %>
+    <table class="table">
+      <tr>
+        <th>Jednostka:</th>
+        <td><%= @unit.name %> (<%= @unit.code %>)</td>
+      </tr>
+      <tr>
+        <th>Rok:</th>
+        <td><%= @year %></td>
+      </tr>
+      <tr>
+        <th>Liczba wpisów:</th>
+        <td><%= bank_journal.entries.count %></td>
+      </tr>
+      <tr>
+        <th>Status:</th>
+        <td><span class="label label-success">Otwarta</span></td>
+      </tr>
+    </table>
+    
+    <div class="row top-buffer-20">
+      <div class="col-md-12">
+        <%= form_tag perform_clear_journal_entries_bank_accounts_path do %>
+          <%= hidden_field_tag :unit_id, @unit.id %>
+          <%= hidden_field_tag :year, @year %>
+          
+          <p>Aby potwierdzić operację, wpisz "USUŃ WSZYSTKIE WPISY" w polu poniżej:</p>
+          <div class="form-group">
+            <input type="text" name="confirmation" class="form-control" required 
+                   pattern="USUŃ WSZYSTKIE WPISY" 
+                   title="Wpisz dokładnie 'USUŃ WSZYSTKIE WPISY'">
+          </div>
+          
+          <div class="form-group">
+            <%= submit_tag 'Potwierdzam usunięcie wszystkich wpisów', class: 'btn btn-danger' %>
+            <%= link_to 'Anuluj', bank_accounts_path, class: 'btn btn-default' %>
+          </div>
+        <% end %>
+      </div>
+    </div>
+  <% else %>
+    <div class="alert alert-warning">
+      <p>
+        Nie znaleziono otwartej książki bankowej dla jednostki <%= @unit.name %> za rok <%= @year %>.
+      </p>
+    </div>
+    
+    <div class="row">
+      <div class="col-md-12">
+        <%= link_to 'Powrót do zarządzania kontami', bank_accounts_path, class: 'btn btn-default' %>
+      </div>
+    </div>
+  <% end %>
+</div> 

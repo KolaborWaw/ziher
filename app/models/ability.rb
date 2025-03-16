@@ -13,8 +13,29 @@ class Ability
         user.can_view_entries(entry.journal)
       end
 
-      can [:create, :update, :destroy], Entry do |entry|
+      can [:create], Entry do |entry|
+        # Sprawdź, czy to nie jest wpis w księdze bankowej jednostki z auto_bank_import
+        if entry.journal.journal_type_id == JournalType::BANK_TYPE_ID && entry.journal.unit.auto_bank_import
+          # Dla księgi bankowej z auto_bank_import tylko superadmin może dodawać wpisy
+          false
+        else
+          user.can_manage_entries(entry.journal)
+        end
+      end
+      
+      can [:update], Entry do |entry|
+        # Zwykli użytkownicy mogą edytować wpisy w księgach bankowych z auto_bank_import
         user.can_manage_entries(entry.journal)
+      end
+      
+      can [:destroy], Entry do |entry|
+        # Sprawdź, czy to nie jest wpis w księdze bankowej jednostki z auto_bank_import
+        if entry.journal.journal_type_id == JournalType::BANK_TYPE_ID && entry.journal.unit.auto_bank_import
+          # Dla księgi bankowej z auto_bank_import tylko superadmin może usuwać wpisy
+          false
+        else
+          user.can_manage_entries(entry.journal)
+        end
       end
 
 # Group

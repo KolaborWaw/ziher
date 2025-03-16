@@ -13,7 +13,7 @@ class JournalsControllerTest < ActionDispatch::IntegrationTest
   test "should get index" do
     get journals_path
     assert_response :redirect
-    assert_redirected_to "/ksiazka_finansowa"
+    assert_redirected_to "/ksiazka_kasowa"
   end
 
   test "index should redirect to journal" do

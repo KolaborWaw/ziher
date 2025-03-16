@@ -58,4 +58,14 @@
   </div>
 </div>
 
-<%= render 'finance_template' %>
+<% if @no_grants %>
+  <div class="row">
+    <div class="col-md-12">
+      <div class="alert alert-warning">
+        <strong>Uwaga!</strong> Nie znaleziono żadnych dotacji za wybrany rok. Utwórz dotację, aby móc wygenerować raport.
+      </div>
+    </div>
+  </div>
+<% else %>
+  <%= render 'finance_template' %>
+<% end %>

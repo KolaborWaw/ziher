@@ -20,6 +20,10 @@
             <span class="text-uppercase">dla</span>
             <br/>
             <%= @selected_unit_name %>
+            <% if @selected_unit && @selected_unit.bank_account.present? %>
+              <br/>
+              <span>Numer konta bankowego: <%= format_bank_account(@selected_unit.bank_account) %></span>
+            <% end %>
         </b>
         </td>
       </tr>

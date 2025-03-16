@@ -39,13 +39,40 @@ class JournalsController < ApplicationController
     @journal = Journal.includes(:journal_grants, entries: { items: [:category, :grants] }).find_by_id(@journal.id)
 
     if @journal.nil? or @journal.unit.is_active == false
+      redirect_to home_url, alert: "Nie znaleziono księgi"
+      return
+    end
+
+    authorize! :show, @journal
+
+    # Zapisanie bieżącego kontekstu w sesji
+    session[:current_year] = @journal.year
+    session[:current_unit_id] = @journal.unit.id
+
+    unless @journal.verify_journal
+      flash.now[:alert] = @journal.errors.values.join("<br/>")
+    end
+
+    if @journal.nil? or @journal.unit.is_active == false
       flash.keep
       redirect_to default_finance_journal_path
     end
 
-    @categories_expense = Category.find_by_year_and_type(@journal.year, true)
-    @categories_income = Category.find_by_year_and_type(@journal.year, false)
-    all_entries = @journal.entries.includes({ items: [:category, :grants, { item_grants: :grant }] }).order('date', 'id')
+    # Cachowanie kategorii w pamięci sesji
+    @categories_expense = fetch_categories(@journal.year, true)
+    @categories_income = fetch_categories(@journal.year, false)
+    
+    # Sortowanie wpisów z uwzględnieniem podpozycji
+    all_entries = if @journal.journal_type_id == JournalType::BANK_TYPE_ID
+      # Dla księgi bankowej: sortowanie po dacie, a następnie najpierw wpisy główne, a potem podpozycje
+      # Dodajemy sortowanie po parent_entry_id, aby upewnić się, że podpozycje są zawsze przypisane do właściwego wpisu głównego
+      @journal.entries.includes({ items: [:category, :grants, { item_grants: :grant }] })
+              .order('date ASC', 'CASE WHEN is_subentry THEN parent_entry_id ELSE id END ASC', 'is_subentry ASC', 'subentry_position ASC', 'id ASC')
+    else
+      # Dla pozostałych ksiąg: standardowe sortowanie
+      @journal.entries.includes({ items: [:category, :grants, { item_grants: :grant }] })
+              .order('date', 'id')
+    end
 
     if params[:items].blank?
       @items = nil
@@ -53,14 +80,56 @@ class JournalsController < ApplicationController
       @page = 0
     else
       @items = params[:items].to_i
-      @pagy, @entries = pagy(all_entries, page: params[:page], items: @items)
+      
+      # Group entries with their subentries to maintain proper numbering
+      if @journal.journal_type_id == JournalType::BANK_TYPE_ID
+        # Collect all main entries (non-subentries)
+        main_entries = all_entries.reject(&:is_subentry)
+        
+        # Calculate total count of main entries for pagination
+        total_main_entries = main_entries.count
+        
+        # Determine what page we're on
+        @page = params[:page].to_i
+        @page = 1 if @page < 1
+        
+        # Calculate which main entries should be on the current page
+        start_index = (@page - 1) * @items
+        end_index = [start_index + @items - 1, total_main_entries - 1].min
+        
+        # Get the main entries for this page
+        page_main_entries = main_entries[start_index..end_index] || []
+        
+        # Find all subentries for these main entries
+        page_entry_ids = page_main_entries.map(&:id)
+        subentries = all_entries.select { |e| e.is_subentry && page_entry_ids.include?(e.parent_entry_id) }
+        
+        # Combine main entries and their subentries
+        @entries = (page_main_entries + subentries).sort_by do |e|
+          [e.date, e.is_subentry ? e.parent_entry_id : e.id, e.is_subentry ? 1 : 0, e.subentry_position || '', e.id]
+        end
+        
+        # Create pagy instance manually
+        @pagy = Pagy.new(count: total_main_entries, page: @page, items: @items)
+      else
+        # For non-bank journals, use standard pagination
+        @pagy, @entries = pagy(all_entries, page: params[:page], items: @items)
+      end
+      
       @page = @pagy.page
     end
 
+    # Calculate the correct starting position for entry numbering
     @start_position = @page < 1 ? 0 : (@page - 1) * @items.to_i
-    @user_units = Unit.find_by_user(current_user)
-    @years = @journal.unit.find_journal_years(@journal.journal_type)
-    @grants_by_journal_year = Grant.get_by_year(@journal.year)
+    
+    # Cachowanie dostępnych dla użytkownika jednostek
+    @user_units = fetch_user_units(current_user)
+    
+    # Cachowanie lat dla bieżącej jednostki i typu księgi
+    @years = fetch_journal_years(@journal.unit, @journal.journal_type)
+    
+    # Cachowanie dotacji dla roku
+    @grants_by_journal_year = fetch_grants_by_year(@journal.year)
 
     if current_user.is_superadmin
       @years << Time.now.year - 1
@@ -68,13 +137,6 @@ class JournalsController < ApplicationController
     end
 
     @years.sort!
-
-    session[:current_year] = @journal.year
-    session[:current_unit_id] = @journal.unit.id
-
-    unless @journal.verify_journal
-      flash.now[:alert] = @journal.errors.values.join("<br/>")
-    end
 
     respond_to do |format|
       format.html { # show.html.erb
@@ -87,23 +149,27 @@ class JournalsController < ApplicationController
         @generation_time = Time.now
         render pdf: "#{journal_type_prefix(@journal.journal_type)}_#{get_time_postfix}",
                template: 'journals/show',
+               layout: 'pdf',
+               page_size: 'A4',
                orientation: 'Landscape',
-               show_as_html: false,
-               footer: {left: "#{current_user.email}, #{Time.now.strftime ('%Y-%m-%d %H:%M:%S')}",
-                        center: "ziher.zhr.pl#{ENV['RAILS_RELATIVE_URL_ROOT']}",
-                        right: 'Strona [page] z [topage]',
-                        font_size: 8
-               }
+               margin: {
+                 top: 10,
+                 bottom: 15,
+                 left: 10,
+                 right: 10
+               },
+               footer: {
+                 font_size: 8,
+                 left: "#{current_user.email}, #{Time.now.strftime('%Y-%m-%d %H:%M:%S')}",
+                 center: "#{request.host_with_port}",
+                 right: 'Strona [page] z [topage]',
+                 spacing: 5
+               },
+               show_as_html: params.key?('debug')
       }
       format.csv {
         @entries = all_entries
-
-        filename = "ZiHeR - #{@journal.unit.full_name.gsub('"', '\'')} - #{@journal.journal_type} za #{session[:current_year]}.csv"
-
-        response.headers['Content-Type'] = 'text/csv'
-        response.headers['Content-Disposition'] = "attachment; filename=\"#{filename}\""
-
-        render template: 'journals/show'
+        render csv: "#{journal_type_prefix(@journal.journal_type)}_#{get_time_postfix}"
       }
     end
   end
@@ -230,5 +296,43 @@ class JournalsController < ApplicationController
 
   def journal_type_prefix(journal_type)
     'ksiazka_' + journal_type.to_s.split(' ')[1]
+  end
+
+  def journal_params
+    params.require(:journal).permit(:journal_type_id, :unit_id, :year, :is_open)
+  end
+  
+  # Metody pomocnicze do cachowania często używanych danych
+  
+  # Cachowanie kategorii
+  def fetch_categories(year, is_expense)
+    cache_key = "categories_#{year}_#{is_expense}"
+    Rails.cache.fetch(cache_key, expires_in: 1.hour) do
+      Category.find_by_year_and_type(year, is_expense)
+    end
+  end
+  
+  # Cachowanie jednostek dostępnych dla użytkownika
+  def fetch_user_units(user)
+    cache_key = "user_units_#{user.id}_#{user.updated_at.to_i}"
+    Rails.cache.fetch(cache_key, expires_in: 1.hour) do
+      Unit.find_by_user(user)
+    end
+  end
+  
+  # Cachowanie lat dla jednostki i typu księgi
+  def fetch_journal_years(unit, journal_type)
+    cache_key = "journal_years_#{unit.id}_#{journal_type.id}_#{unit.updated_at.to_i}"
+    Rails.cache.fetch(cache_key, expires_in: 1.hour) do
+      unit.find_journal_years(journal_type)
+    end
+  end
+  
+  # Cachowanie dotacji dla roku
+  def fetch_grants_by_year(year)
+    cache_key = "grants_by_year_#{year}"
+    Rails.cache.fetch(cache_key, expires_in: 1.hour) do
+      Grant.get_by_year(year)
+    end
   end
 end

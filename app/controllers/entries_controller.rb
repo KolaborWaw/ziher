@@ -25,6 +25,9 @@ class EntriesController < ApplicationController
     @linked_entry = create_empty_items_in_linked_entry(@entry)
     @referer = request.referer
 
+    # Store the items parameter in the view context if present in the URL
+    @items_param = params[:items] if params[:items].present?
+
     respond_to do |format|
       format.html # new.html.erb
       format.json { render json: @entry }
@@ -47,17 +50,69 @@ class EntriesController < ApplicationController
     authorize! :create, @entry
 
     respond_to do |format|
-      if @entry.save
-        format.html do
-          if params[:entry][:referer]
-            redirect_to params[:entry][:referer], notice: 'Wpis utworzony'
+      # Próba zapisania wpisu
+      begin
+        save_success = @entry.save
+        
+        # Process subentries parameters if needed
+        if params[:entry][:subentries_count].present?
+          Rails.logger.info "** SUBENTRIES CONTROLLER CREATE: Checking conditions for subentries"
+          subentries_count = params[:entry][:subentries_count].to_i
+          Rails.logger.info "** SUBENTRIES CONTROLLER CREATE: Selected subentries count: #{subentries_count}"
+          
+          if @entry.can_have_subentries? && subentries_count > 0 && subentries_count <= 9
+            Rails.logger.info "** SUBENTRIES CONTROLLER CREATE: Calling update_subentries(#{subentries_count - 1})"
+            @entry.update_subentries(subentries_count - 1) # -1 because the main entry counts as the first subentry
           else
-            redirect_to @entry.journal, notice: 'Wpis utworzony'
+            Rails.logger.info "** SUBENTRIES CONTROLLER CREATE: Invalid subentries count: #{subentries_count} or entry cannot have subentries"
           end
+        else
+          Rails.logger.info "** SUBENTRIES CONTROLLER CREATE: No subentries count parameter provided"
+        end
+        
+      rescue => e
+        # Obsługa błędów podczas zapisywania
+        Rails.logger.error("Error while creating entry: #{e.message}")
+        save_success = false
+        @entry.errors.add(:base, "Error occurred while saving: #{e.message}")
+      end
+      
+      if save_success
+        format.html do
+          # Zawsze wracaj do strony, z której przyszedł użytkownik (referer),
+          # a jeśli referer nie istnieje, wróć do widoku książki
+          flash[:notice] = 'Entry created'
+          
+          # Extract items parameter from either the URL, form, or referer
+          items_param = ""
+          if params[:entry][:items].present?
+            items_param = "?items=#{params[:entry][:items]}"
+          elsif params[:items].present?
+            items_param = "?items=#{params[:items]}"
+          elsif @referer.present? && @referer.include?("items=")
+            items_param = "?#{@referer.split('?').last}" if @referer.include?('?')
+          end
+          
+          redirect_destination = if @referer.present?
+            # If referer doesn't contain items parameter but we have one, add it
+            if !@referer.include?("items=") && items_param.present?
+              separator = @referer.include?('?') ? '&' : '?'
+              "#{@referer}#{separator}#{items_param.sub('?', '')}"
+            else
+              @referer
+            end
+          else
+            # If no referer, redirect to journal with items parameter
+            "#{journal_path(@entry.journal)}#{items_param}"
+          end
+          
+          redirect_to redirect_destination
         end
         format.json { render json: @entry, status: :created, location: @entry }
       else
         @journal = @entry.journal
+        @categories = Category.where(:year => @entry.journal.year, :is_expense => @entry.is_expense)
+        @sorted_items = @entry.items.sort_by {|item| item.category&.position.to_s }
 
         format.html { render action: "new" }
         format.json { render json: @entry.errors, status: :unprocessable_entity }
@@ -71,13 +126,39 @@ class EntriesController < ApplicationController
     authorize! :update, @entry
     @journal = @entry.journal
     @other_journals = @journal.journals_for_linked_entry
-    @categories = Category.where(:year => @entry.journal.year, :is_expense => @entry.is_expense)
+    
+    # Sprawdź, czy to księga bankowa z auto_bank_import
+    @is_auto_import_bank = @journal.journal_type_id == JournalType::BANK_TYPE_ID && @journal.unit.auto_bank_import
+    
+    # Sprawdź, czy zmieniono typ wpisu
+    if params[:type_changed].present?
+      # Pobieramy kategorie zgodne z NOWYM typem wpisu (przeciwnym do oryginalnego)
+      @categories = Category.where(:year => @entry.journal.year, :is_expense => !@entry.is_expense)
+      # Aktualizujemy is_expense w entry do wyświetlenia właściwego formularza
+      @entry.is_expense = !@entry.is_expense
+      # Zapisujemy informację o zmianie typu w sesji dla celów bezpieczeństwa
+      session[:entry_type_changed] = true
+    else
+      # Standardowe zachowanie - pobieramy kategorie zgodne z obecnym typem wpisu
+      @categories = Category.where(:year => @entry.journal.year, :is_expense => @entry.is_expense)
+      # Czyścimy informację o zmianie typu
+      session[:entry_type_changed] = nil
+    end
+    
     create_empty_items(@entry, @journal.year)
 
     @linked_entry = create_empty_items_in_linked_entry(@entry)
 
     @sorted_items = @entry.items.sort_by {|item| item.category.position.to_s}
     @referer = request.referer
+    
+    # Store the items parameter in the view context if present in the URL
+    @items_param = params[:items] if params[:items].present?
+    
+    # Jeśli referer nie istnieje lub prowadzi do nieprawidłowej strony, użyj widoku książki jako fallback
+    if @referer.blank? || !(@referer =~ /journals/)
+      @referer = journal_path(@journal)
+    end
   end
 
   # PUT /entries/1
@@ -88,29 +169,130 @@ class EntriesController < ApplicationController
     authorize! :update, @entry
     @journal = @entry.journal
     @other_journals = @journal.journals_for_linked_entry
-
+    
+    # Sprawdź, czy to księga bankowa z auto_bank_import
+    is_auto_import_bank = @journal.journal_type_id == JournalType::BANK_TYPE_ID && @journal.unit.auto_bank_import
+    
+    # Jeśli zwykły użytkownik próbuje zmienić datę wpisu w księdze auto_bank_import, przywróć oryginalną datę
+    if is_auto_import_bank && !current_user.is_superadmin && params[:entry][:date] != @entry.date.to_s
+      # Ustaw datę na oryginalną wartość
+      params[:entry][:date] = @entry.date.to_s
+      flash[:alert] = "Data wpisu w księgach bankowych z auto-importem może być zmieniona tylko przez administratora."
+    end
+    
+    # Zapisz oryginalny typ wpisu przed zmianą
+    original_is_expense = @entry.is_expense
+    
+    # Obsługa linked_entry (powiązanego wpisu)
     if params[:is_linked]
       if @entry.linked_entry
-        @entry.linked_entry.update_attributes(params[:linked_entry])
-        linked_entry = @entry.linked_entry
+        # Jeśli linked_entry już istnieje, aktualizuj go
+        if params[:linked_entry]
+          @entry.linked_entry.update_attributes(params[:linked_entry])
+          linked_entry = @entry.linked_entry
+        end
       else
-        linked_entry = Entry.new(params[:linked_entry])
+        # Jeśli linked_entry nie istnieje, utwórz nowy
+        if params[:linked_entry]
+          linked_entry = Entry.new(params[:linked_entry])
+          linked_entry = copy_to_linked_entry(@entry, linked_entry)
+          @entry.linked_entry = linked_entry
+        end
       end
-      @entry.linked_entry = copy_to_linked_entry(@entry, linked_entry)
+      
       @linked_entry = @entry.linked_entry
     end
 
     respond_to do |format|
-      if @entry.update_attributes(entry_params)
-        format.html do
-          if params[:entry][:referer]
-            redirect_to params[:entry][:referer], notice: 'Zmiany zapisane'
-          else
-            redirect_to @journal, notice: 'Zmiany zapisane'
+      # Próba aktualizacji wpisu
+      begin
+        update_success = @entry.update_attributes(entry_params)
+        
+        # Synchronizuj datę wyciągu i numer wyciągu z podpozycjami dla wpisów w księdze bankowej
+        if update_success && @entry.journal && @entry.journal.journal_type_id == JournalType::BANK_TYPE_ID && !@entry.is_subentry && @entry.subentries.any?
+          Rails.logger.info "** PODPOZYCJE KONTROLER UPDATE: Aktualizuję datę i numer wyciągu w podpozycjach"
+          
+          # Pobierz datę i numer wyciągu z głównego wpisu
+          date_value = @entry.date
+          statement_number_value = @entry.statement_number
+          
+          # Zaktualizuj te same wartości we wszystkich podpozycjach
+          @entry.subentries.each do |subentry|
+            Rails.logger.info "** PODPOZYCJE KONTROLER UPDATE: Aktualizuję podpozycję #{subentry.id}"
+            subentry.update_columns(
+              date: date_value,
+              statement_number: statement_number_value
+            )
           end
+          
+          Rails.logger.info "** PODPOZYCJE KONTROLER UPDATE: Zakończono aktualizację podpozycji"
+        end
+        
+        # Process subentries first if applicable
+        if params[:entry][:subentries_count].present?
+          Rails.logger.info "** SUBENTRIES CONTROLLER UPDATE: Checking conditions for subentries"
+          subentries_count = params[:entry][:subentries_count].to_i
+          Rails.logger.info "** SUBENTRIES CONTROLLER UPDATE: Selected subentries count: #{subentries_count}"
+          
+          if @entry.can_have_subentries? && subentries_count >= 0 && subentries_count <= 9
+            Rails.logger.info "** SUBENTRIES CONTROLLER UPDATE: Calling update_subentries(#{subentries_count - 1})"
+            @entry.update_subentries(subentries_count - 1) # -1 because the main entry counts as the first subentry
+          else
+            Rails.logger.info "** SUBENTRIES CONTROLLER UPDATE: Invalid subentries count: #{subentries_count} or entry cannot have subentries"
+          end
+        else
+          Rails.logger.info "** SUBENTRIES CONTROLLER UPDATE: No subentries count parameter provided"
+        end
+        
+      rescue => e
+        # Obsługa błędów podczas aktualizacji
+        Rails.logger.error("Error while updating entry: #{e.message}")
+        update_success = false
+        @entry.errors.add(:base, "Error occurred while saving: #{e.message}")
+      end
+      
+      # Sprawdź, czy aktualizacja się powiodła
+      if update_success
+        # Sprawdź czy zmienił się typ wpisu
+        if original_is_expense != @entry.is_expense
+          flash[:notice] = "Changes saved. Changed entry type from #{original_is_expense ? 'expense' : 'income'} to #{@entry.is_expense ? 'expense' : 'income'}."
+        else
+          flash[:notice] = "Changes saved"
+        end
+        
+        # Wyczyść informację o zmianie typu z sesji
+        session[:entry_type_changed] = nil
+        
+        format.html do
+          # Extract items parameter from either the URL, form, or referer
+          items_param = ""
+          if params[:entry][:items].present?
+            items_param = "?items=#{params[:entry][:items]}"
+          elsif params[:items].present?
+            items_param = "?items=#{params[:items]}"
+          elsif @referer.present? && @referer.include?("items=")
+            items_param = "?#{@referer.split('?').last}" if @referer.include?('?')
+          end
+          
+          redirect_destination = if @referer.present?
+            # If referer doesn't contain items parameter but we have one, add it
+            if !@referer.include?("items=") && items_param.present?
+              separator = @referer.include?('?') ? '&' : '?'
+              "#{@referer}#{separator}#{items_param.sub('?', '')}"
+            else
+              @referer
+            end
+          else
+            # If no referer, redirect to journal with items parameter
+            "#{journal_path(@journal)}#{items_param}"
+          end
+          
+          redirect_to redirect_destination
         end
         format.json { head :ok }
       else
+        # W przypadku błędu walidacji, przygotuj formularz do ponownego wyświetlenia
+        @categories = Category.where(:year => @entry.journal.year, :is_expense => @entry.is_expense)
         create_empty_items(@entry, @journal.year)
         @sorted_items = @entry.items.sort_by {|item| item.category.position.to_s}
 
@@ -129,12 +311,23 @@ class EntriesController < ApplicationController
     @entry.destroy
 
     respond_to do |format|
-      format.html { redirect_to journal_url(journal) }
+      # Preserve pagination setting by extracting items parameter from the URL
+      items_param = ""
+      if params[:items].present?
+        items_param = "?items=#{params[:items]}"
+      elsif request.referer.present? && request.referer.include?("items=")
+        items_param = "?#{request.referer.split('?').last}" if request.referer.include?('?')
+      end
+      
+      redirect_url = "#{journal_url(journal)}#{items_param}"
+      format.html { redirect_to redirect_url }
       format.json { head :ok }
     end
   end
 
   def create_empty_items_in_linked_entry(entry)
+    return nil unless entry
+    
     if entry.linked_entry
       linked_entry = entry.linked_entry
     else
@@ -142,32 +335,86 @@ class EntriesController < ApplicationController
       linked_entry.items = []
       linked_entry.is_expense = !entry.is_expense
     end
+    
+    # Upewnij się, że linked_entry ma prawidłowy typ (przeciwny do głównego wpisu)
+    if linked_entry.is_expense == entry.is_expense
+      linked_entry.is_expense = !entry.is_expense
+    end
+    
     create_empty_items(linked_entry, entry.journal.year)
 
     return linked_entry
   end
 
   def create_empty_items(entry, year)
-    Category.where(:year => year, :is_expense => entry.is_expense).each do |category|
-      unless entry.has_category(category)
-        entry.items << Item.new(:category_id => category.id)
+    # Sprawdź czy wymagane pola są ustawione
+    return if entry.nil? || year.nil?
+    
+    # Najpierw czyścimy istniejące items, gdy zmieniamy typ wpisu
+    if params[:type_changed].present?
+      entry.items = []
+    end
+    
+    # Pobierz wszystkie kategorie pasujące do typu wpisu i roku
+    begin
+      categories = Category.where(:year => year, :is_expense => entry.is_expense)
+      
+      # Dodajemy nowe items dla odpowiednich kategorii
+      categories.each do |category|
+        unless entry.has_category(category)
+          new_item = Item.new(:category_id => category.id)
+          # Ustaw domyślne wartości dla nowego item
+          new_item.amount = 0
+          new_item.amount_one_percent = 0 if category.is_expense
+          entry.items << new_item
+        end
       end
+    rescue => e
+      # Loguj błąd, ale nie przerywaj wykonania
+      Rails.logger.error("Error while creating empty items: #{e.message}")
     end
   end
 
   def copy_to_linked_entry(entry, linked_entry)
-      linked_entry.date = entry.date
-      linked_entry.name = entry.name
-      linked_entry.is_expense = !entry.is_expense
-      linked_entry.document_number = entry.document_number
-      return linked_entry
+    return nil unless entry && linked_entry
+  
+    # Kopiujemy podstawowe dane z głównego wpisu
+    linked_entry.date = entry.date
+    linked_entry.name = entry.name
+    linked_entry.document_date = entry.document_date if entry.respond_to?(:document_date)
+    
+    # Upewniamy się, że linked_entry ma zawsze przeciwny typ do głównego wpisu
+    linked_entry.is_expense = !entry.is_expense
+    
+    # Kopiujemy document_number zawsze
+    linked_entry.document_number = entry.document_number
+    
+    # Kopiujemy statement_number tylko jeśli to księga bankowa
+    if entry.journal && entry.journal.journal_type_id == JournalType::BANK_TYPE_ID
+      linked_entry.statement_number = entry.statement_number
+    end
+    
+    # Upewnij się, że linked_entry ma prawidłowy journal_id, jeśli nie został jeszcze ustawiony
+    if linked_entry.journal_id.blank? && entry.journal
+      # Znajdź domyślny journal o przeciwnym typie
+      other_journals = entry.journal.journals_for_linked_entry
+      linked_entry.journal_id = other_journals.first.id if other_journals.any?
+    end
+    
+    # Resetowanie pól związanych z podpozycjami
+    linked_entry.is_subentry = false
+    linked_entry.parent_entry_id = nil
+    linked_entry.subentry_position = nil
+    linked_entry.subentries_count = 1
+    
+    return linked_entry
   end
 
   private
 
   def entry_params
     if params[:entry]
-      params.require(:entry).permit(:date, :name, :document_number, :journal_id, :is_expense, :linked_entry,
+      params.require(:entry).permit(:date, :document_date, :name, :document_number, :statement_number, :journal_id, :is_expense, :linked_entry, :subentries_count,
                                     :items_attributes => [:id, :amount, :amount_one_percent, :category_id, :grant_id,
                                       :item_grants_attributes => [:id, :amount, :grant_id, :item_id]])
     end

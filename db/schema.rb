@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 2025_01_08_133005) do
+ActiveRecord::Schema.define(version: 2025_03_15_000000) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -60,7 +60,19 @@ ActiveRecord::Schema.define(version: 2025_01_08_133005) do
     t.integer "journal_id"
     t.boolean "is_expense"
     t.integer "linked_entry_id"
+    t.string "statement_number"
+    t.boolean "is_parent", default: false
+    t.integer "parent_id"
+    t.integer "subentry_index"
+    t.integer "subentry_count", default: 1
+    t.bigint "parent_entry_id"
+    t.date "document_date"
+    t.boolean "is_subentry", default: false
+    t.string "subentry_position"
+    t.integer "subentries_count", default: 1
+    t.index ["is_subentry"], name: "index_entries_on_is_subentry"
     t.index ["journal_id"], name: "index_entries_on_journal_id"
+    t.index ["parent_entry_id"], name: "index_entries_on_parent_entry_id"
   end
 
   create_table "grants", force: :cascade do |t|
@@ -173,6 +185,8 @@ ActiveRecord::Schema.define(version: 2025_01_08_133005) do
     t.datetime "updated_at", null: false
     t.string "code"
     t.boolean "is_active", default: true, null: false
+    t.string "bank_account"
+    t.boolean "auto_bank_import", default: false
     t.index ["code"], name: "index_units_on_code", unique: true
     t.index ["is_active"], name: "index_units_on_is_active"
   end
@@ -240,4 +254,5 @@ ActiveRecord::Schema.define(version: 2025_01_08_133005) do
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
   end
 
+  add_foreign_key "entries", "entries", column: "parent_entry_id"
 end

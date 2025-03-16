@@ -26,26 +26,37 @@ class InventoryEntryVerifier
   private
 
   def get_inventory_sums(year)
-    inventory_sums = Hash.new
-
-    inventory_journal = Array.new
-    InventoryEntry.includes(:inventory_source).where(:unit => @unit, :is_expense => false).each do |entry|
-      if entry.date.year == year
-        inventory_journal << entry
+    # Cache key dla zminimalizowania powtórnych obliczeń
+    @inventory_sums_cache ||= {}
+    cache_key = "inventory_sums_#{@unit.id}_#{year}"
+    return @inventory_sums_cache[cache_key] if @inventory_sums_cache[cache_key]
+    
+    # Globalny cache między żądaniami
+    Rails.cache.fetch(cache_key, expires_in: 1.hour) do
+      inventory_sums = Hash.new
+      
+      # Oryginalna implementacja
+      inventory_journal = Array.new
+      InventoryEntry.includes(:inventory_source).where(:unit => @unit, :is_expense => false).each do |entry|
+        if entry.date.year == year
+          inventory_journal << entry
+        end
       end
-    end
 
-    entries_by_type = Hash.new {|h,k| h[k]=[]}
-    inventory_journal.each do |entry|
-      entries_by_type[entry.inventory_source] << entry
-    end
+      entries_by_type = Hash.new {|h,k| h[k]=[]}
+      inventory_journal.each do |entry|
+        entries_by_type[entry.inventory_source] << entry
+      end
 
-    entries_by_type.each do |type, entries|
-      inventory_sum = entries.sum(&:total_value)
-      inventory_sums[type.id] = inventory_sum
+      entries_by_type.each do |type, entries|
+        inventory_sum = entries.sum(&:total_value)
+        inventory_sums[type.id] = inventory_sum
+      end
+      
+      # Zapisanie wyniku w pamięci podręcznej instancji
+      @inventory_sums_cache[cache_key] = inventory_sums
+      inventory_sums
     end
-
-    return inventory_sums
   end
 
   def get_finance_sums(year)
@@ -86,7 +97,9 @@ class InventoryEntryVerifier
   end
 
   def get_sum(unit, year, type)
-    category = Category.where(:year => year, :name => 'Wyposażenie')
+    category = Category.find_by(:year => year, :name => 'Wyposażenie')
+    return 0 if category.nil?
+    
     journal = Journal.includes(entries: :items).find_by_unit_and_year_and_type(unit, year, type)
     return journal.nil? ? 0 : journal.get_sum_for_category(category)
   end

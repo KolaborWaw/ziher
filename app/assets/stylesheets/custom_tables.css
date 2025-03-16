@@ -1,0 +1,69 @@
+/* Nadpisanie stylów dla tabel w aplikacji */
+
+/* Usuwanie pionowych kresek i cieniowania w tabelach */
+.table {
+  border-collapse: collapse !important;
+}
+
+.table > thead > tr > th,
+.table > tbody > tr > th,
+.table > tfoot > tr > th,
+.table > thead > tr > td,
+.table > tbody > tr > td,
+.table > tfoot > tr > td {
+  border-left: 0 !important;
+  border-right: 0 !important;
+  background-color: transparent !important;
+}
+
+/* Usuwanie pasków w tabelach */
+.table-striped > tbody > tr:nth-of-type(odd),
+.table-striped > tbody > tr:nth-of-type(even),
+.table > tbody > tr:nth-of-type(odd),
+.table > tbody > tr:nth-of-type(even) {
+  background-color: transparent !important;
+}
+
+/* Usuwanie efektu hover na wierszach tabeli */
+.table-hover > tbody > tr:hover {
+  background-color: transparent !important;
+}
+
+/* Usuwanie obramowania tabeli */
+.table-bordered {
+  border: 0 !important;
+}
+
+.table-bordered > thead > tr > th,
+.table-bordered > tbody > tr > th,
+.table-bordered > tfoot > tr > th,
+.table-bordered > thead > tr > td,
+.table-bordered > tbody > tr > td,
+.table-bordered > tfoot > tr > td {
+  border-left: 0 !important;
+  border-right: 0 !important;
+}
+
+/* Pozostawienie tylko poziomych linii */
+.table > thead > tr > th,
+.table > tbody > tr > th,
+.table > tfoot > tr > th,
+.table > thead > tr > td,
+.table > tbody > tr > td,
+.table > tfoot > tr > td {
+  border-top: 1px solid #ddd !important;
+  border-bottom: 1px solid #ddd !important;
+}
+
+/* Usuwanie cieniowania komórek w tabeli */
+.table .success,
+.table .warning,
+.table .danger,
+.table .info {
+  background-color: transparent !important;
+}
+
+/* Dodatkowe klasy dla modyfikacji tła */
+.hover, .hover_dim {
+  background-color: transparent !important;
+} 

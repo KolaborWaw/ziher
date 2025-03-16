@@ -15,15 +15,20 @@ class Category < ApplicationRecord
   before_destroy :check_category_usage
 
   def Category.get_all_years
-    years = []
-    Category.find_each do |category|
-      years << category.year
+    Rails.cache.fetch("category_all_years", expires_in: 1.hour) do
+      years = []
+      Category.find_each do |category|
+        years << category.year
+      end
+      years.uniq.sort
     end
-    return years.uniq.sort
   end
 
   def Category.find_by_year_and_type(year, is_expense)
-    Category.where(year: year, is_expense: is_expense)
+    cache_key = "categories_#{year}_#{is_expense}"
+    Rails.cache.fetch(cache_key, expires_in: 1.hour) do
+      Category.where(year: year, is_expense: is_expense)
+    end
   end
 
   def Category.create_income_from_grant_for_year(year, grant)
@@ -34,11 +39,19 @@ class Category < ApplicationRecord
     category.grant_id = grant.id
     category.save
 
+    # Wyczyść cache kategorii po dodaniu nowej
+    Rails.cache.delete("categories_#{year}_false")
+    Rails.cache.delete("category_all_years")
+    Rails.cache.delete("grants_by_year_#{year}")
+
     return category
   end
 
   def Category.find_grants_by_year(year)
-    Category.where(year: year).where.not(grant_id: nil)
+    cache_key = "categories_grants_#{year}"
+    Rails.cache.fetch(cache_key, expires_in: 1.hour) do
+      Category.where(year: year).where.not(grant_id: nil)
+    end
   end
 
   def cannot_have_multiple_one_percent_categories_in_one_year

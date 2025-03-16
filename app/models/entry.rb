@@ -1,5 +1,5 @@
 # encoding: utf-8
-# TODO: wywalic stringi do I18n
+# TODO: move strings to I18n
 class Entry < ApplicationRecord
   include ActiveModel::Validations
   audited
@@ -7,6 +7,10 @@ class Entry < ApplicationRecord
   has_many :items, dependent: :destroy
   belongs_to :journal
   has_one :linked_entry, :class_name => "Entry", :foreign_key => "linked_entry_id"
+  
+  # Relacje dla podpozycji
+  belongs_to :parent_entry, class_name: "Entry", foreign_key: "parent_entry_id", optional: true
+  has_many :subentries, class_name: "Entry", foreign_key: "parent_entry_id", dependent: :destroy
 
   accepts_nested_attributes_for :items
   accepts_nested_attributes_for :linked_entry
@@ -15,10 +19,13 @@ class Entry < ApplicationRecord
   validates :journal, :presence => true
   validates :date, :presence => true
   validates :name, :presence => true
-  validates :document_number, :presence => true
-
+  # document_number no longer required for all entries
+  # validates :document_number, :presence => true
+  # statement_number is validated in must_have_statement_number_for_bank_journal
+  
   validate :must_be_from_journals_year
-
+  validate :must_have_statement_number_for_bank_journal
+  validate :must_have_document_number_for_cash_journal
   validate :cannot_have_multiple_items_in_one_category
   validate :cannot_have_item_from_category_not_from_journals_year
   validate :must_be_either_expense_or_income
@@ -31,6 +38,37 @@ class Entry < ApplicationRecord
 
   after_save :recalculate_initial_balance
   after_destroy :recalculate_initial_balance
+
+  # For backwards compatibility with existing records, provide statement_number getter/setter
+  # that falls back to document_number if statement_number is nil
+  def statement_number
+    self[:statement_number] || self[:document_number]
+  end
+
+  def statement_number=(value)
+    self[:statement_number] = value
+  end
+
+  # Data dokumentu - bez automatycznego fallbacku do daty wyciągu
+  def document_date
+    self[:document_date]
+  end
+
+  def must_have_statement_number_for_bank_journal
+    if journal && journal.journal_type_id == JournalType::BANK_TYPE_ID
+      if statement_number.blank?
+        errors[:base] << "Numer wyciągu jest wymagany dla księgi bankowej"
+      end
+    end
+  end
+
+  def must_have_document_number_for_cash_journal
+    if journal && journal.journal_type_id != JournalType::BANK_TYPE_ID
+      if document_number.blank?
+        errors[:base] << "Numer dokumentu jest wymagany dla księgi kasowej"
+      end
+    end
+  end
 
   def get_amount_for_category(category)
     category_id = category.is_a?(Category) ? category.id : category
@@ -123,15 +161,19 @@ class Entry < ApplicationRecord
   end
 
   def must_be_either_expense_or_income
-    is_expense = false
-    is_income = false
-    items.each do |item|
-      if item.amount && item.amount > 0
-        is_expense = true if item.category.is_expense
-        is_income = true unless item.category.is_expense
-        if is_expense && is_income
-          errors[:base] << "Wpis nie może być jednocześnie wpływem i wydatkiem"
-        end
+    # Podczas zmiany typu wpisu, sprawdzamy tylko kategorie, które mają niezerowe wartości,
+    # aby umożliwić zmianę typu wpisu
+    non_zero_items = items.select { |item| item.amount && item.amount > 0 }
+    
+    # Jeśli są jakieś niezerowe elementy, muszą mieć kategorie zgodne z typem wpisu
+    different_type_items = non_zero_items.select { |item| item.category.is_expense != self.is_expense }
+    
+    if different_type_items.any?
+      # Jeśli to jest zmiana typu wpisu, ignorujemy ten błąd - walidacja będzie przeprowadzona ponownie po zapisaniu
+      # z poprawnymi kategoriami
+      unless is_changing_type?
+        item_categories = different_type_items.map { |item| item.category.name }.join(", ")
+        errors[:base] << "Wszystkie kategorie w wpisie muszą być tego samego typu (#{self.is_expense ? 'wydatek' : 'wpływ'}). Nieprawidłowe kategorie: #{item_categories}"
       end
     end
   end
@@ -184,5 +226,154 @@ class Entry < ApplicationRecord
     income_sum = entries.select { |e| !e.is_expense }.sum { |e| e.sum.to_d }
 
     @balance = initial_balance + income_sum - expense_sum
+  end
+
+  # Pomocnicza metoda określająca czy wpis jest do zmiany
+  def is_changing_type?
+    return false unless persisted?  # Tylko dla istniejących wpisów
+    
+    # Sprawdź, czy is_expense się zmieniło
+    is_expense_changed = changes.key?('is_expense') && changes['is_expense'][0] != changes['is_expense'][1]
+    
+    is_expense_changed
+  end
+
+  # Metody dla podpozycji
+  
+  # Czy wpis może mieć podpozycje (tylko główne wpisy w księdze bankowej mogą mieć podpozycje)
+  def can_have_subentries?
+    result = !is_subentry && journal && journal.journal_type_id == JournalType::BANK_TYPE_ID
+    Rails.logger.info "** SUBENTRIES: can_have_subentries? = #{result} (is_subentry=#{is_subentry}, journal=#{journal&.id}, type=#{journal&.journal_type_id}, bank_type=#{JournalType::BANK_TYPE_ID})"
+    result
+  end
+  
+  # Pobieranie oznaczenia pozycji (np. "2a", "2b")
+  def position_label(position)
+    return position.to_s unless can_have_subentries? || is_subentry
+    
+    if is_subentry
+      Rails.logger.info "** SUBENTRIES: Generating label for subentry id=#{id}, parent_id=#{parent_entry_id}, position=#{position}#{subentry_position}"
+      "#{position}#{subentry_position}"
+    else
+      # Główne wpisy z podpozycjami mają oznaczenie "2a"
+      Rails.logger.info "** SUBENTRIES: Generating label for main entry id=#{id}, position=#{position}a"
+      "#{position}a"
+    end
+  end
+  
+  # Tworzenie lub aktualizacja podpozycji
+  def update_subentries(new_count)
+    Rails.logger.info "** SUBENTRIES: Called update_subentries with count #{new_count}"
+    
+    # Jeśli nie można mieć podpozycji, zakończ
+    unless can_have_subentries?
+      Rails.logger.info "** SUBENTRIES: Cannot create subentries. is_subentry=#{is_subentry}, journal_present=#{journal.present?}, journal_type=#{journal&.journal_type_id}, bank_type=#{JournalType::BANK_TYPE_ID}"
+      return
+    end
+    
+    # Pobierz istniejącą liczbę podpozycji z relacji
+    current_count = subentries.count
+    Rails.logger.info "** SUBENTRIES: Current subentry count: #{current_count}"
+    
+    # Nie rób nic, jeśli liczba podpozycji się nie zmieniła
+    if new_count == current_count
+      Rails.logger.info "** SUBENTRIES: Count did not change, skipping"
+      return
+    end
+    
+    # Aktualizuj wartość pola subentries_count na 1 + liczba podpozycji
+    # (1+ ponieważ główny wpis liczy się jako pierwsza pozycja "a")
+    Rails.logger.info "** SUBENTRIES: Updating subentry count to #{new_count + 1}"
+    update_column(:subentries_count, new_count + 1)
+    
+    # Dodawanie nowych podpozycji
+    if new_count > current_count
+      Rails.logger.info "** SUBENTRIES: Adding #{new_count - current_count} new subentries"
+      
+      # Iterujemy przez nowe pozycje (b, c, d, itd.)
+      ('b'.ord + current_count..'b'.ord + new_count - 1).each_with_index do |char_code, index|
+        position = char_code.chr
+        Rails.logger.info "** SUBENTRIES: Creating subentry #{position}"
+        create_subentry(position, index + current_count + 1)
+      end
+    
+    # Usuwanie nadmiarowych podpozycji (od końca)
+    elsif new_count < current_count
+      Rails.logger.info "** SUBENTRIES: Removing #{current_count - new_count} excess subentries"
+      subentries_to_remove = subentries.order(subentry_position: :desc).limit(current_count - new_count)
+      subentries_to_remove.destroy_all
+    end
+    
+    Rails.logger.info "** SUBENTRIES: Finished updating subentries"
+  end
+  
+  # Tworzenie pojedynczej podpozycji
+  def create_subentry(position, order_index)
+    Rails.logger.info "** SUBENTRIES: Starting to create subentry #{position}"
+    
+    # Tworzenie nowej podpozycji na podstawie wpisu głównego
+    subentry = self.class.new(
+      # Kopiujemy pola z wpisu głównego
+      journal_id: self.journal_id,
+      date: self.date,
+      is_expense: self.is_expense,
+      
+      # Ustawiamy pola specyficzne dla podpozycji
+      is_subentry: true,
+      parent_entry_id: self.id,
+      subentry_position: position,
+      subentries_count: 1,
+      
+      # Domyślne wartości dla podpozycji
+      name: "Nowa podpozycja do uzupełnienia",
+      document_date: nil,
+      document_number: "",
+      statement_number: self.statement_number # Zachowujemy ten sam numer wyciągu
+    )
+    
+    Rails.logger.info "** SUBENTRIES: Creating subentry for main entry id=#{self.id}, position=#{position}"
+    
+    # Kopiujemy items z wpisu głównego
+    Rails.logger.info "** SUBENTRIES: Creating items for subentry - amount 0.01 only for first category"
+    
+    # Sortujemy kategorie tak samo jak są pokazywane w interfejsie
+    sorted_items = self.items.sort_by { |item| item.category_id }
+    Rails.logger.info "** SUBENTRIES: Found #{sorted_items.size} categories to process"
+    
+    # Flaga do śledzenia, czy pierwszej kategorii została już przypisana kwota
+    first_item_processed = false
+    
+    # Przetwarzamy każdą kategorię z wpisu głównego
+    sorted_items.each do |item|
+      # Przygotowanie nowego elementu dla podpozycji
+      new_item = Item.new(
+        category_id: item.category_id,
+        amount: 0.0,
+        amount_one_percent: 0.0
+      )
+      
+      # Dla pierwszej kategorii ustawiamy kwotę 0.01
+      if !first_item_processed
+        new_item.amount = 0.01
+        # Ustawiamy amount_one_percent tylko jeśli kategoria jest "one percent"
+        new_item.amount_one_percent = item.category.is_one_percent ? 0.01 : 0.0
+        first_item_processed = true
+        Rails.logger.info "** SUBENTRIES: Adding amount 0.01 to first category (id=#{item.category_id}): #{item.category.name}"
+      else
+        Rails.logger.info "** SUBENTRIES: Adding amount 0.00 to category (id=#{item.category_id}): #{item.category.name}"
+      end
+      
+      # Dodanie item do podpozycji
+      subentry.items << new_item
+    end
+    
+    # Zapis podpozycji
+    if subentry.save
+      Rails.logger.info "** SUBENTRIES: Created subentry #{position} (ID: #{subentry.id}) with #{subentry.items.count} items, amount 0.01 in first category"
+      return subentry
+    else
+      Rails.logger.error "** SUBENTRIES: Error creating subentry #{position}: #{subentry.errors.full_messages.join(', ')}"
+      return nil
+    end
   end
 end

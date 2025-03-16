@@ -23,7 +23,7 @@
 
     journal_types = [finance_hash, bank_hash]
     journal_types.each_with_index do |hash, index|
-      journal_type = (index == 0) ? "ks. finansowa" : "ks. bankowa"
+      journal_type = (index == 0) ? "ks. kasowa" : "ks. bankowa"
 
       row = "#{unit.full_name}\t#{journal_type}"
 

@@ -174,4 +174,43 @@ class UnitTest < ActiveSupport::TestCase
     #then
     assert_nil balance
   end
+
+  test "should handle bank account settings" do
+    unit = units(:one)
+    
+    # Set bank account
+    unit.bank_account = "12345678901234567890"
+    unit.auto_bank_import = true
+    assert unit.save, "Failed to save unit with bank account"
+    
+    # Verify bank account settings
+    assert_equal "12345678901234567890", unit.bank_account
+    assert unit.auto_bank_import
+    
+    # Clear bank account
+    unit.bank_account = nil
+    unit.auto_bank_import = false
+    assert unit.save, "Failed to save unit without bank account"
+    
+    # Verify bank account settings
+    assert_nil unit.bank_account
+    assert_not unit.auto_bank_import
+  end
+  
+  test "should cache journal years correctly" do
+    unit = units(:one)
+    journal_type = journal_types(:one)
+    
+    # First call should query the database
+    years1 = unit.find_journal_years(journal_type)
+    
+    # Second call should use the cache
+    years2 = unit.find_journal_years(journal_type)
+    
+    # Results should be the same
+    assert_equal years1, years2
+    
+    # Current year should be included
+    assert_includes years1, Date.today.year
+  end
 end
